@@ -1,6 +1,5 @@
 package ch.mno.ugo2;
 
-import ch.mno.ugo2.cli.UgoCli;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
