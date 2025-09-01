@@ -1,0 +1,49 @@
+tenant:
+  id: tenant1
+  display-name: "My WebTV"
+
+spring:
+  datasource:
+    url: jdbc:mariadb://localhost:3306/ugo_tenant1
+    username: ugo
+    password: change-me
+  jpa:
+    open-in-view: false
+
+platforms:
+  facebook:
+    api-version: "v23.0"
+    page-ids: ["123456789012345","987654321098765"]
+    access-token: "fb-***-placeholder"
+  youtube:
+    channel-ids: ["UCxxxxxxxxxxxxxxxx","UCyyyyyyyyyyyyyyyy"]
+    api-key: "yt-***-placeholder"
+  instagram:
+    business-ids: []
+    access-token: "ig-***-placeholder"
+  wordpress:
+    endpoints:
+      - "https://example.com/wp-json/wp/v2/posts?_fields=id,date,link,title,excerpt,slug&per_page=50"
+
+ingest:
+  resume-checkpoints: true
+
+metrics:
+  min-delta-relative: 0.01
+  min-delta-absolute: 10
+  daily-guard-snapshot: true
+
+stars:
+  thresholds:
+    one-star-gradient: 0.50
+    two-stars-gradient: 1.50
+
+alerts:
+  milestone-step: 1000
+  emails: ["alerts@example.org"]
+  stale-stats-hours: 24
+
+logging:
+  level:
+    ch.mno.ugo2: INFO
+
