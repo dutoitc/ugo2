@@ -9,6 +9,20 @@ and this project aims to follow Semantic Versioning for app releases (doc-only p
 - Decide final license (AGPL-3.0-or-later recommended).
 - Define API daily budgets per platform.
 
+## [0.2.0-skeleton] - 2025-09-01
+### Added
+- Spring Boot 3.3 **skeleton** (Java 21) with **Spring Data JDBC** and **Flyway**.
+- **Picocli CLI**: `import:init` and `update --profile=J0|J1TOJ7|POSTJ7|ARCHIVE --mode=stats|discover|both`.
+- Typed **configuration binding** (tenant, platforms, metrics, stars, alerts).
+- `application.properties.tmpl` with **fictitious values** (override outside VCS).
+- Flyway `V1__bootstrap.sql` (non-intrusive).
+
+### Changed
+- README updated with build/run instructions.
+
+### Fixed
+- n/a
+
 ## [0.1.0-docs] - 2025-09-01
 ### Added
 - README (FR) with architecture overview, normalization policy, stars/alerts design.
@@ -25,5 +39,7 @@ and this project aims to follow Semantic Versioning for app releases (doc-only p
 
 ---
 
-[Unreleased]: https://github.com/dutoitc/ugo2/compare/0.1.0-docs...HEAD
+[Unreleased]: https://github.com/dutoitc/ugo2/compare/0.2.0-skeleton...HEAD
+[0.2.0-skeleton]: https://github.com/dutoitc/ugo2/releases/tag/0.2.0-skeleton
 [0.1.0-docs]: https://github.com/dutoitc/ugo2/releases/tag/0.1.0-docs
+

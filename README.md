@@ -1,12 +1,13 @@
-# UGO2 — Suivi multi-plateformes des vues vidéo (FB / YT / IG / WP)
+# UGO2  Suivi multi-plateformes des vues vidé(FB / YT / IG / WP)
 
-**Objectif** : agréger, réconcilier et suivre les **vues** (référence 3s FB, équivalents YT/IG), l’**engagement** (commentaires, réactions/likes, partages, saves) et les **tendances** (24h/7j/28j) pour des vidéos publiées sur **Facebook**, **YouTube**, **Instagram** et **WordPress** (WP non inclus dans les totaux).
+**Objectif** : agrér, réncilier et suivre les **vues** (rérence 3s FB, éivalents YT/IG), l**engagement** (commentaires, rétions/likes, partages, saves) et les **tendances** (24h/7j/28j) pour des vidé publié sur **Facebook**, **YouTube**, **Instagram** et **WordPress** (WP non inclus dans les totaux).
 
-## Portée
-- Plusieurs webTV **indépendantes** : **1 DB/tenant** et **1 UI PHP/tenant**, sélection par fichier de configuration à l’exécution.
-- Sources par tenant : YT & FB obligatoires, IG **optionnel**, WP pour référence (hors somme).
+## Porté- Plusieurs webTV **indéndantes** : **1 DB/tenant** et **1 UI PHP/tenant**, séction par fichier de configuration àexétion.
+- Sources par tenant : YT & FB obligatoires, IG **optionnel**, WP pour rérence (hors somme).
 
-## Architecture (aperçu)
+## Architecture (aperç
+
+
 ```
 [FB Graph v23]  [IG Graph]  [YT Data v3]  [WP REST]
       \             |            |              /
@@ -29,48 +30,37 @@
                 - Admin : overrides LINK/UNLINK, flags teaser/main
 ```
 
-## Réconciliation (résumé)
-- Matching fuzzy **titre/description**, proximité **±72h**, durée tolérance ±30s, heuristiques **teaser** (mots-clés, durée courte, antériorité 2–3 jours).
+## Rénciliation (rémé- Matching fuzzy **titre/description**, proximité*±72h**, durétolénce ±30s, heuristiques **teaser** (mots-clé durécourte, antéorité3 jours).
 - Overrides admin priment (link/unlink, teaser/main).
-- **Date officielle** = première date de publication **du cluster** (teasers inclus).
+- **Date officielle** = premiè date de publication **du cluster** (teasers inclus).
 
-## Normalisation “vues 3s”
-- **FB** : `total_video_views/lifetime` = référence 3s.
-- **YT** : `statistics.viewCount` (pas 3s) ⇒ **équivalent** documenté.
-- **IG** : `video_views` (vidéos) / `plays` (Reels) ⇒ équivalents 3s.
-- **WP** : exclu de la somme, affichage séparé.
-
+## Normalisation vues 3s
+- **FB** : `total_video_views/lifetime` = rérence 3s.
+- **YT** : `statistics.viewCount` (pas 3s) ? **éivalent** documenté- **IG** : `video_views` (vidé) / `plays` (Reels) ? éivalents 3s.
+- **WP** : exclu de la somme, affichage séré
 ## Cadences & quotas
 - **J0** (publication) : 11:00, 11:15, 11:30, 12:00, 12:30, 13:00, 13:30, 14:00, 15:00, 16:00, 17:00, 18:00, 19:00, 20:00, 21:00, 22:00.
-- **J+1 à J+7** : 06:00, 09:00, 12:00, 15:00, 18:00, 21:00.
-- **> J+7** : 1–2×/jour. **> 1 mois** : 1×/semaine.
-- Pipelines **séparés** : Discovery (liste contenus, moins fréquent) vs Stats (métriques, plus fréquent).
+- **J+1 à+7** : 06:00, 09:00, 12:00, 15:00, 18:00, 21:00.
+- **> J+7** : 12×jour. **> 1 mois** : 1×semaine.
+- Pipelines **séré* : Discovery (liste contenus, moins fréent) vs Stats (méiques, plus fréent).
 - Reprise quotas : checkpoints persistants + backoff exponentiel + **If-None-Match/ETag**.
 
 ## Parcimonie de stockage
-- **Snapshot** inséré **seulement si** `deltaRel ≥ 1%` **ou** `deltaAbs ≥ 10 vues` (paramétrables).
-- **Garde-fou** : 1 snapshot/jour pour chaque source afin d’éviter des trous de série.
+- **Snapshot** insé **seulement si** `deltaRel = 1%` **ou** `deltaAbs = 10 vues` (paraméables).
+- **Garde-fou** : 1 snapshot/jour pour chaque source afin déter des trous de sée.
 
-## Étoiles (gradient)
-- ⭐/**⭐⭐** à côté des vues **par source** quand la **croissance 24h** excède un **seuil** vs médiane 7j (paramètres dans `CONFIGURATION.md`).
+## Éoiles (gradient)
+- ?/**??** àôdes vues **par source** quand la **croissance 24h** excè un **seuil** vs méane 7j (paramèes dans `CONFIGURATION.md`).
 
 ## Alertes
-- **Palier vues** toutes les **1000** (paramétrable), par source et total (hors WP).
-- **Token expiré** (401/403) et **stats non mises à jour** depuis 24h.
+- **Palier vues** toutes les **1000** (paraméable), par source et total (hors WP).
+- **Token expiré (401/403) et **stats non mises àour** depuis 24h.
 
-## Roadmap (haut niveau)
-- Sprint 1: infra, DDL, CLI squelette, config tenant, docs (présent PR).
-- Sprint 2: discovery (FB/YT/IG/WP) + stats de base, ETag & quotas.
-- Sprint 3: réconciliation + admin overrides + carte (v1).
-- Sprint 4: tendances, alertes, exports, polish & observabilité.
+## Build & Run (squelette PR2)
+- Prére un fichier `src/main/resources/application.properties` **hors-git** àartir de `application.properties.tmpl`.
+- requires JDK21
+- Build :  
+  ```bash
+  mvn -q -DskipTests package
 
-## Contribution
-- **Conventional Commits** (`feat:`, `fix:`, `docs:`, `chore:`…)
-- Chaque PR met à jour **README**, **REQUIREMENTS**, **TODO**, **CHANGELOG**.
 
-## Licence
-- Recommandation: **AGPL-3.0-or-later** (copyleft fort côté réseau/SaaS).
-- À confirmer : GPL/AGPL autorisent l’usage commercial (vente incluse).
-
-## Statut
-- PR #1 : **documentation uniquement** (aucun code).
