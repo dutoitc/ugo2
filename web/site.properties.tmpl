@@ -1,0 +1,16 @@
+# Cible SSH
+HOST=votre-serveur.exemple.org
+PORT=22
+USER=deploy
+
+# Dossier distant STRICT (sera la racine de sync; avec suppression)
+REMOTE_DIR=/mysite
+
+# Variante de config copiée en src/back/config/config.php avant sync
+CONFIG_VARIANT=config.php.site1
+
+# Facultatif: clé privée si vous en avez une (sinon laissez vide → mot de passe interactif SSH)
+SSH_IDENTITY=~/.ssh/id_ed25519
+
+# Dry run (1 = simulation)
+DRY_RUN=0

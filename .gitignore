@@ -30,3 +30,7 @@ replay_pid*
 /web/up-capstv-back
 /web/up-xplore
 /web/up-xplore-back
+/web/*.properties
+/web/src/back/config/config.php
+/web/src/back/config/config.php.*
+/web/up-capstv.sh
