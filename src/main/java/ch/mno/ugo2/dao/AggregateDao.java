@@ -34,25 +34,25 @@ public class AggregateDao {
         (rs, rowNum) -> Map.of("video_id", rs.getLong(1), "views_total_no_wp", rs.getLong(2)));
   }
 
-  public List<Map<String,Object>> aggregatesByPresenter() {
+  public List<Map<String,Object>> aggregatesByPresentateur() {
     String sql =
-      "SELECT p.display_name AS presenter, SUM(t.views_total_no_wp) AS views " +
+      "SELECT p.display_name AS presentateur, SUM(t.views_total_no_wp) AS views " +
       "FROM video_presenter vp " +
       "JOIN person p ON p.id = vp.person_id " +
       "JOIN v_video_totals_latest t ON t.video_id = vp.video_id " +
       "GROUP BY p.display_name " +
       "ORDER BY views DESC";
-    return jdbc.query(sql, Map.of(), (rs, rowNum) -> Map.of("presenter", rs.getString(1), "views", rs.getLong(2)));
+    return jdbc.query(sql, Map.of(), (rs, rowNum) -> Map.of("presentateur", rs.getString(1), "views", rs.getLong(2)));
   }
 
-  public List<Map<String,Object>> aggregatesByDirector() {
+  public List<Map<String,Object>> aggregatesByRealisateur() {
     String sql =
-      "SELECT p.display_name AS director, SUM(t.views_total_no_wp) AS views " +
-      "FROM video_director vd " +
-      "JOIN person p ON p.id = vd.person_id " +
-      "JOIN v_video_totals_latest t ON t.video_id = vd.video_id " +
+      "SELECT p.display_name AS realisateur, SUM(t.views_total_no_wp) AS views " +
+      "FROM video_realisateur vr " +
+      "JOIN person p ON p.id = vr.person_id " +
+      "JOIN v_video_totals_latest t ON t.video_id = vr.video_id " +
       "GROUP BY p.display_name " +
       "ORDER BY views DESC";
-    return jdbc.query(sql, Map.of(), (rs, rowNum) -> Map.of("director", rs.getString(1), "views", rs.getLong(2)));
+    return jdbc.query(sql, Map.of(), (rs, rowNum) -> Map.of("realisateur", rs.getString(1), "views", rs.getLong(2)));
   }
 }
