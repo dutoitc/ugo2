@@ -4,6 +4,7 @@ import ch.mno.ugo2.dto.MetricsUpsertItem;
 import ch.mno.ugo2.dto.OverrideItem;
 import ch.mno.ugo2.dto.SourceUpsertItem;
 import lombok.Builder;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -15,6 +16,7 @@ import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,6 +24,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class WebApiClient {
 
+    @Getter
     private final WebClient webClient;
     private final ApiAuthSigner signer;
     private final int maxBatch;
@@ -37,6 +40,21 @@ public class WebApiClient {
 
     public Mono<Void> health() {
         return webClient.get().uri("/api/v1/health").retrieve().bodyToMono(String.class).then();
+    }
+
+    /** Envoie un POST signé vide pour vérifier l'auth HMAC sans effet de bord. */
+    public Mono<Boolean> authNoop() {
+        byte[] body = Jsons.toBytes(Collections.emptyList());
+        String path = "/api/v1/metrics:batchUpsert";
+        return webClient.post()
+                .uri(path)
+                .headers(h -> {
+                    signer.sign(h, "POST", path, body);
+                    h.set("Idempotency-Key", UUID.randomUUID().toString());
+                })
+                .body(BodyInserters.fromValue(Collections.emptyList()))
+                .exchangeToMono(resp -> Mono.just(resp.statusCode().is2xxSuccessful()))
+                .retryWhen(Retry.backoff(2, Duration.ofSeconds(1)));
     }
 
     public Mono<Void> batchUpsertSources(List<SourceUpsertItem> items) {
