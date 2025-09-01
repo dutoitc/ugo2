@@ -45,3 +45,29 @@ alerts.stale-stats-hours=24
 # --- Logging ---
 logging.level.ch.mno.ugo2=INFO
 
+
+# ===== Batch =====
+app.batch.initial=false
+app.batch.rolling-days=7
+
+# ===== Platforms =====
+app.platforms.fb.enabled=true
+app.platforms.fb.page-id=1234567890
+app.platforms.fb.access-token=***-placeholder
+
+app.platforms.yt.enabled=true
+app.platforms.yt.channel-id=UCxxxxxxxxxxxxxxxx
+app.platforms.yt.api-key=***-placeholder
+
+app.platforms.ig.enabled=false
+app.platforms.ig.user-id=
+app.platforms.ig.access-token=
+
+app.platforms.wp.enabled=true
+app.platforms.wp.base-url=https://example.org
+
+# ===== Budgets per run (soft caps) =====
+app.budgets.fb-calls=5000
+app.budgets.yt-calls=5000
+app.budgets.ig-calls=5000
+app.budgets.wp-calls=2000
