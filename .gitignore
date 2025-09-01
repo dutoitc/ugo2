@@ -25,3 +25,8 @@ target
 hs_err_pid*
 replay_pid*
 
+/notes.txt
+/web/up-capstv
+/web/up-capstv-back
+/web/up-xplore
+/web/up-xplore-back
