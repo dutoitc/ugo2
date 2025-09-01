@@ -1,95 +1,42 @@
 package ch.mno.ugo2.service;
 
 import ch.mno.ugo2.config.AppProps;
-import ch.mno.ugo2.model.SourceVideo;
-import ch.mno.ugo2.model.Video;
-import ch.mno.ugo2.reconcile.Clusterer;
-import ch.mno.ugo2.reconcile.MatchingScorer;
-import ch.mno.ugo2.reconcile.TeaserHeuristics;
-import ch.mno.ugo2.repo.SourceVideoRepository;
-import ch.mno.ugo2.repo.VideoRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.*;
 
+/**
+ * Réconciliation “API sink”: le regroupement se fait côté API/DB web.
+ * Ici on garde la signature pour l’orchestrateur, mais on ne touche plus la DB locale.
+ */
 @Service
 public class ReconciliationService {
 
-  private final SourceVideoRepository sourceRepo;
-  private final VideoRepository videoRepo;
-  private final AppProps appProps;
+  private static final Logger log = LoggerFactory.getLogger(ReconciliationService.class);
+  private final AppProps cfg;
 
-  public ReconciliationService(SourceVideoRepository sourceRepo,
-                               VideoRepository videoRepo,
-                               AppProps appProps) {
-    this.sourceRepo = sourceRepo;
-    this.videoRepo = videoRepo;
-    this.appProps = appProps;
+  public ReconciliationService(AppProps cfg) {
+    this.cfg = cfg;
   }
 
-  public record ResultSummary(int clusters, int createdVideos, int linkedSources, int skippedLocked) {}
+  /**
+   * Résumé de réconciliation attendu par BatchOrchestrator.
+   * Garder ces noms d’accesseurs: clusters(), linkedSources(), skippedLocked()
+   * car l’orchestrateur les utilise dans son printf.
+   */
+  public record ResultSummary(int clusters, int created, int linkedSources, int skippedLocked) {}
 
-  @Transactional
+  /**
+   * @param from fenêtre de temps (début)
+   * @param to   fenêtre de temps (fin)
+   * @param dryRun si true, ne ferait rien (ici no-op de toute façon)
+   * @return un résumé “vide” (0) tant que tout se passe côté API web.
+   */
   public ResultSummary reconcile(LocalDateTime from, LocalDateTime to, boolean dryRun) {
-    List<SourceVideo> candidates = new ArrayList<>();
-    sourceRepo.findByPublishedBetween(from, to).forEach(candidates::add);
-    if (candidates.isEmpty()) return new ResultSummary(0, 0, 0, 0);
-
-    AppProps.Reconcile cfg = appProps.getReconcile();
-    Clusterer clusterer = new Clusterer(cfg.threshold);
-    MatchingScorer scorer = new MatchingScorer(cfg);
-    List<List<SourceVideo>> clusters = clusterer.cluster(candidates, scorer);
-
-    int created = 0, linked = 0, lockedSkip = 0;
-
-    for (List<SourceVideo> cluster : clusters) {
-      LocalDateTime earliest = cluster.stream()
-          .map(SourceVideo::getPublishedAt)
-          .filter(Objects::nonNull)
-          .min(LocalDateTime::compareTo).orElse(null);
-      long earliestEpoch = earliest!=null ? earliest.toEpochSecond(java.time.ZoneOffset.UTC) : 0L;
-
-      Long chosenVideoId = cluster.stream()
-          .map(SourceVideo::getVideoId).filter(Objects::nonNull)
-          .collect(java.util.stream.Collectors.collectingAndThen(java.util.stream.Collectors.toSet(), set -> set.isEmpty()? null : set.iterator().next()));
-
-      Video video;
-      if (chosenVideoId == null) {
-        video = new Video();
-        video.setCanonicalTitle(cluster.stream().map(SourceVideo::getTitle).filter(Objects::nonNull).findFirst().orElse(""));
-        video.setCanonicalDescription(cluster.stream().map(SourceVideo::getDescription).filter(Objects::nonNull).findFirst().orElse(null));
-        video.setOfficialPublishedAt(earliest);
-        if (!dryRun) video = videoRepo.save(video);
-        created++;
-      } else {
-        video = videoRepo.findById(chosenVideoId).orElseGet(() -> { Video v = new Video(); v.setId(chosenVideoId); return v; });
-        if (video.getOfficialPublishedAt()==null || (earliest!=null && earliest.isBefore(video.getOfficialPublishedAt()))) {
-          video.setOfficialPublishedAt(earliest);
-          if (!dryRun) videoRepo.save(video);
-        }
-      }
-
-      TeaserHeuristics heur = new TeaserHeuristics(cfg);
-      for (SourceVideo s : cluster) {
-        boolean isLocked = false;
-        try {
-          var m = s.getClass().getDeclaredMethod("isLocked");
-          isLocked = (boolean) m.invoke(s);
-        } catch (Exception ignore) {}
-        if (isLocked) { lockedSkip++; continue; }
-
-        boolean teaser = s.isTeaser() || heur.isTeaser(s, earliestEpoch);
-        if (!dryRun) {
-          s.setTeaser(teaser);
-          s.setVideoId(video.getId());
-          sourceRepo.save(s);
-        }
-        linked++;
-      }
-    }
-
-    return new ResultSummary(clusters.size(), created, linked, lockedSkip);
+    log.info("[reconcile] window={}..{}, dryRun={}, mode=API-sink (no-op ici)", from, to, dryRun);
+    // Si tu veux déclencher un recalcul côté API web, c’est ici que tu appellerais un endpoint dédié.
+    return new ResultSummary(0, 0, 0, 0);
   }
 }

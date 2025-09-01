@@ -5,12 +5,12 @@
                              https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>ch.mno</groupId>
-    <artifactId>ugo2-project</artifactId>
-    <version>0.2.0-SNAPSHOT</version>
+    <groupId>ch.mno.ugo2</groupId>
+    <artifactId>parent</artifactId>
+    <version>0.3.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
-  <artifactId>ugo2-web</artifactId>
+  <artifactId>web</artifactId>
   <name>UGO2 Web (PHP API single-root)</name>
   <packaging>pom</packaging>
   <properties>

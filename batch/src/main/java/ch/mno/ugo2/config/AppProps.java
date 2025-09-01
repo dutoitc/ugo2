@@ -2,19 +2,18 @@ package ch.mno.ugo2.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
-import jakarta.validation.constraints.NotNull;
 
 @Validated
 @ConfigurationProperties(prefix = "app")
 public class AppProps {
 
   // ==== Batch (modes auto) ====
-  @NotNull private Batch batch = new Batch();
+  private Batch batch = new Batch();
   public Batch getBatch() { return batch; }
   public static class Batch { public boolean initial = false; public int rollingDays = 7; }
 
   // ==== Plateformes (activations + IDs) ====
-  @NotNull private Platforms platforms = new Platforms();
+  private Platforms platforms = new Platforms();
   public Platforms getPlatforms() { return platforms; }
   public static class Platforms {
     public Facebook fb = new Facebook();
@@ -28,12 +27,12 @@ public class AppProps {
   public static class WordPress{ public boolean enabled = true;  public String baseUrl = ""; }
 
   // ==== Budgets (soft caps) ====
-  @NotNull private Budgets budgets = new Budgets();
+  private Budgets budgets = new Budgets();
   public Budgets getBudgets() { return budgets; }
   public static class Budgets { public int fbCalls = 5000; public int ytCalls = 5000; public int igCalls = 5000; public int wpCalls = 2000; }
 
   // ==== Réconciliation (fuzzy + heuristiques) ====
-  @NotNull private Reconcile reconcile = new Reconcile();
+  private Reconcile reconcile = new Reconcile();
   public Reconcile getReconcile() { return reconcile; }
   public static class Reconcile {
     public double titleWeight = 0.6;

@@ -26,7 +26,11 @@ EXCLUDES=(
   --exclude="target"       --exclude="./target"       --exclude="*/target/*"
   --exclude="build"        --exclude="./build"        --exclude="*/build/*"
   --exclude="dist"         --exclude="./dist"         --exclude="*/dist/*"
-  --exclude=".DS_Store"
+  --exclude=".DS_Store"    --exclude="./web/*capstv*" --exclude="./web/*explore*"
+  --exclude="web/site-capstv.properties" --exclude="web/site-xplore.properties" --exclude="web/up-capstv"
+  --exclude="web/up-capstv-back" --exclude="web/up-capstv.sh" --exclude="web/up-xplore"
+  --exclude="web/up-xplore-back" --exclude="web/src/back/config/config.php.capstv"
+  --exclude="web/src/back/config/config.php.xplore"
 )
 
 # snapshot des fichiers (inclut dotfiles, pas . ni ..)
