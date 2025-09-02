@@ -44,7 +44,9 @@ public class WebApiClient {
                 .then();
     }
 
-    /** POST vide signé pour valider l’auth, sans effet de bord. */
+    /**
+     * POST vide signé pour valider l’auth, sans effet de bord.
+     */
     public Mono<Boolean> authNoop() {
         byte[] body = Jsons.toBytes(Collections.emptyList());
         String path = "/api/v1/metrics:batchUpsert";
@@ -60,25 +62,27 @@ public class WebApiClient {
     }
 
     public Mono<Void> batchUpsertSources(List<SourceUpsertItem> items) {
-        return sendChunked("/api/v1/sources:batchUpsert", items);
+        return sendChunkedWrapped("/api/v1/sources:batchUpsert", "sources", items);
     }
 
     public Mono<Void> batchUpsertMetrics(List<MetricsUpsertItem> items) {
-        return sendChunked("/api/v1/metrics:batchUpsert", items);
+        return sendChunkedWrapped("/api/v1/metrics:batchUpsert", "snapshots", items);
     }
 
     public Mono<Void> applyOverrides(List<OverrideItem> items) {
         return sendChunked("/api/v1/overrides:apply", items);
     }
 
-    /** Retourne la liste des IDs manquants pour une plateforme donnée. */
+    /**
+     * Retourne la liste des IDs manquants pour une plateforme donnée.
+     */
     public Mono<List<String>> filterMissingSources(String platform, List<String> ids) {
         if (ids == null || ids.isEmpty()) return Mono.just(List.of());
         final String path = "/api/v1/sources:filterMissing";
 
         Map<String, Object> req = new HashMap<>();
         req.put("platform", platform);
-        req.put("externalIds", ids);
+        req.put("ids", ids);
 
         byte[] body = Jsons.toBytes(req);
         log.info("API POST {} (check ids={})", path, ids.size());
@@ -103,7 +107,9 @@ public class WebApiClient {
                         log.warn("API {} -> {} body={}", path, e.getRawStatusCode(), e.getResponseBodyAsString()));
     }
 
-    /** DTO JSON pour /sources:filterMissing */
+    /**
+     * DTO JSON pour /sources:filterMissing
+     */
     public static class FilterMissingResp {
         public boolean ok;
         public String platform;
@@ -127,10 +133,11 @@ public class WebApiClient {
         return chain;
     }
 
-    private <T> Mono<Void> send(String path, List<T> payload) {
+    private <T> Mono<Void> send(String path, Object payload) {
         byte[] body = Jsons.toBytes(payload);
         String idempotencyKey = UUID.randomUUID().toString();
-        int items = payload == null ? 0 : payload.size();
+        int items = (payload instanceof List<?> l) ? l.size() :
+                (payload instanceof Map<?, ?> m && m.values().stream().findFirst().orElse(null) instanceof List<?> l2 ? ((List<?>) m.values().stream().findFirst().get()).size() : -1);
         log.info("API POST {} (items={}, bytes={})", path, items, body.length);
 
         return webClient.post()
@@ -156,4 +163,23 @@ public class WebApiClient {
                     return Mono.error(new RuntimeException("API " + path + " failed: " + code));
                 });
     }
+
+
+    /**
+     * Envoi chunké avec enveloppe {"wrapperKey":[slice]} pour respecter le schéma PHP.
+     */
+    private <T> Mono<Void> sendChunkedWrapped(String path, String wrapperKey, List<T> all) {
+        if (all == null || all.isEmpty()) return Mono.empty();
+        int from = 0;
+        Mono<Void> chain = Mono.empty();
+        while (from < all.size()) {
+            int to = Math.min(from + maxBatch, all.size());
+            List<T> slice = all.subList(from, to);
+            Map<String, Object> wrapped = Map.of(wrapperKey, slice);
+            chain = chain.then(send(path, wrapped));
+            from = to;
+        }
+        return chain;
+    }
+
 }
