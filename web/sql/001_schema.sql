@@ -1,7 +1,7 @@
 SET NAMES utf8mb4;
 SET time_zone = '+00:00';
-CREATE DATABASE IF NOT EXISTS `ugo2_prod` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE `ugo2_prod`;
+--CREATE DATABASE IF NOT EXISTS `ugo2_prod` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+--USE `ugo2_prod`;
 
 CREATE TABLE person (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,

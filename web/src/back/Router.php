@@ -15,10 +15,13 @@ final class Router
 
     public function __construct()
     {
+        // Chargement config + services de base
         $cfg        = Config::load();
         $this->db   = new Db($cfg['db'] ?? []);
-        $this->auth = new Auth($cfg);
+        $this->auth = new Auth($cfg['ingestKeys'] ?? [], $this->db);
 
+
+        // Déclaration des routes
         $this->routes = [
             // Health
             ['GET',  '/api/v1/health',                ['Web\\Controllers\\HealthController', 'health']],
@@ -27,13 +30,12 @@ final class Router
             ['POST', '/api/v1/sources:filterMissing', ['Web\\Controllers\\SourcesIngestController', 'filterMissing']],
             ['POST', '/api/v1/sources:batchUpsert',   ['Web\\Controllers\\SourcesIngestController', 'batchUpsert']],
 
-            // Ingestion METRICS (écrit dans metric_snapshot)
+            // Ingestion METRICS
             ['POST', '/api/v1/metrics:batchUpsert',   ['Web\\Controllers\\MetricsIngestController', 'batchUpsert']],
 
-            // Lecture (tes contrôleurs statiques qui retournent un array)
+            // Lecture
             ['GET',  '/api/v1/videos',                ['Web\\Controllers\\VideosController', 'list']],
             ['GET',  '/api/v1/aggregates/presenters', ['Web\\Controllers\\AggregatesController', 'presenters']],
-            // "directors" côté API → méthode "realisateurs" côté code
             ['GET',  '/api/v1/aggregates/directors',  ['Web\\Controllers\\AggregatesController', 'realisateurs']],
         ];
     }
@@ -47,8 +49,8 @@ final class Router
 
     public function dispatch(): void
     {
+        // CORS + pré-vol
         $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-
         if ($method === 'OPTIONS') {
             header('Access-Control-Allow-Origin: *');
             header('Access-Control-Allow-Methods: GET,POST,OPTIONS');
@@ -60,44 +62,57 @@ final class Router
         $uriPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
         $path    = self::normalize($uriPath);
 
-        foreach ($this->routes as [$m, $r, $handler]) {
-            if ($m === $method && $r === $path) {
-                [$class, $fn] = $handler;
+        // Petit log (utile en dév)
+        $ct = $_SERVER['CONTENT_TYPE']  ?? '';
+        $cl = $_SERVER['CONTENT_LENGTH'] ?? '0';
+        error_log(sprintf('[API] %s %s (CT=%s, CL=%s)', $method, $path, $ct, $cl));
 
-                // Si la méthode est statique et retourne un array -> on sérialise ici.
-                if (method_exists($class, $fn)) {
-                    $ref = new \ReflectionMethod($class, $fn);
-                    if ($ref->isStatic()) {
-                        $out = $class::$fn($this->db);
-                        if (is_array($out)) {
-                            Http::json($out, 200);
-                        } else {
-                            Http::json(['ok'=>true], 200);
+        try {
+            foreach ($this->routes as [$m, $r, $handler]) {
+                if ($m === $method && $r === $path) {
+                    [$class, $fn] = $handler;
+
+                    // Méthode statique qui retourne un array → sérialisation ici
+                    if (method_exists($class, $fn)) {
+                        $ref = new \ReflectionMethod($class, $fn);
+                        if ($ref->isStatic()) {
+                            $out = $class::$fn($this->db);
+                            if (is_array($out)) {
+                                Http::json($out, 200);
+                            } else {
+                                Http::json(['ok' => true], 200);
+                            }
+                            return;
                         }
+                    }
+
+                    // Sinon instance (le contrôleur écrit la réponse JSON lui-même)
+                    $controller = new $class($this->db, $this->auth);
+                    if (!method_exists($controller, $fn)) {
+                        Http::json(['error' => 'not_implemented'], 501);
                         return;
                     }
+                    $controller->$fn();
+                    return;
                 }
+            }
 
-                // Sinon : instance qui gère elle-même la réponse (echo/json)
-                $controller = new $class($this->db, $this->auth);
-                $controller->$fn();
+            // 405 si chemin existe mais mauvaise méthode
+            $allowed = [];
+            foreach ($this->routes as [$m, $r]) {
+                if ($r === $path) $allowed[] = $m;
+            }
+            if ($allowed) {
+                header('Allow: ' . implode(',', array_unique($allowed)));
+                Http::json(['error' => 'method_not_allowed'], 405);
                 return;
             }
-        }
 
-        // 405 si chemin existe avec autre méthode
-        $allowed = [];
-        foreach ($this->routes as [$m, $r]) if ($r === $path) $allowed[] = $m;
-        if ($allowed) {
-            header('Content-Type: application/json; charset=utf-8');
-            header('Allow: ' . implode(',', array_unique($allowed)));
-            http_response_code(405);
-            echo json_encode(['error' => 'method_not_allowed'], JSON_UNESCAPED_UNICODE);
-            return;
+            // 404
+            Http::json(['error' => 'not_found', 'path' => $path], 404);
+        } catch (\Throwable $e) {
+            error_log('[API] ERROR ' . $e->getMessage());
+            Http::json(['error' => 'internal_error', 'message' => $e->getMessage()], 500);
         }
-
-        header('Content-Type: application/json; charset=utf-8');
-        http_response_code(404);
-        echo json_encode(['error' => 'not_found ' . $path . ' / ' . $uriPath . ' / ' . $path], JSON_UNESCAPED_UNICODE);
     }
 }

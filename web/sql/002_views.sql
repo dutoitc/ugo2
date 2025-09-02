@@ -1,5 +1,3 @@
-USE `ugo2_prod`;
-
 CREATE OR REPLACE VIEW v_latest_snapshot AS
 SELECT ms.*
 FROM metric_snapshot ms

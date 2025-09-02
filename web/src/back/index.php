@@ -14,7 +14,5 @@ require_once __DIR__ . '/controllers/MetricsIngestController.php';
 require_once __DIR__ . '/controllers/VideosController.php';
 require_once __DIR__ . '/controllers/AggregatesController.php';
 
-echo 'DBG1';
 $router = new \Web\Router();
-echo 'DBG2';
 $router->dispatch();

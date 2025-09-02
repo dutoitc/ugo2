@@ -5,20 +5,29 @@ namespace Web\Lib;
 
 final class Http
 {
-    /** @return array{0:int,1:array} */
-    public static function readJson(): array
-    {
-        $raw = file_get_contents('php://input') ?: '';
-        $ct  = $_SERVER['CONTENT_TYPE'] ?? '';
-        if (stripos($ct, 'application/json') === false) {
-            return [415, ['error'=>'unsupported_media_type']];
+     private static ?string $RAW = null;
+
+        public static function rawBody(): string
+        {
+            if (self::$RAW !== null) return self::$RAW;
+            // lit UNE fois puis cache
+            self::$RAW = file_get_contents('php://input') ?: '';
+            return self::$RAW;
         }
-        $data = json_decode($raw, true);
-        if (!is_array($data)) {
-            return [400, ['error'=>'bad_request','detail'=>'JSON invalide']];
+
+        public static function readJson(): array
+        {
+            $raw = self::rawBody();
+            $data = json_decode($raw, true);
+            if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+                header('Content-Type: application/json; charset=utf-8');
+                http_response_code(400);
+                echo json_encode(['error' => 'invalid_json', 'details' => json_last_error_msg()], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            return $data;
         }
-        return [200, $data];
-    }
+
 
     public static function json($payload, int $code=200): void
     {
@@ -26,4 +35,6 @@ final class Http
         http_response_code($code);
         echo json_encode($payload, JSON_UNESCAPED_UNICODE);
     }
+
+
 }
