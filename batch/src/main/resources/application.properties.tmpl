@@ -1,5 +1,16 @@
-# === API sink (per-tenant) ===
-ugo2.api.baseUrl=https://remote_host_api
-ugo2.api.keyId=tenant-app-batch
+# === API sink ===
+ugo2.api.baseUrl=https://ugo2.capstv.ch
+ugo2.api.keyId=tenant-capstv-batch
 ugo2.api.secret=REPLACE_WITH_LONG_RANDOM_SECRET
 ugo2.api.maxBatch=1000
+
+# === YouTube collector ===
+ugo2.youtube.apiKey=YOUR_YT_API_KEY
+ugo2.youtube.channelIds=YOUT_YT_CHANNEL_ID
+ugo2.youtube.windowDaysRolling=7
+ugo2.youtube.pageSize=50
+ugo2.youtube.maxVideosPerRun=200
+ugo2.youtube.stateDir=.ugo2
+ugo2.youtube.minDeltaRel=0.01
+ugo2.youtube.minDeltaAbs=10
+ugo2.youtube.dailyFloor=true

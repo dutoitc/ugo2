@@ -39,10 +39,13 @@ public class WebApiClient {
     }
 
     public Mono<Void> health() {
-        return webClient.get().uri("/api/v1/health").retrieve().bodyToMono(String.class).then();
+        return webClient.get().uri("/api/v1/health")
+                .retrieve()
+                .bodyToMono(String.class)
+                .then();
     }
 
-    /** Envoie un POST signé vide pour vérifier l'auth HMAC sans effet de bord. */
+    /** POST vide signé pour valider l’auth, sans effet de bord. */
     public Mono<Boolean> authNoop() {
         byte[] body = Jsons.toBytes(Collections.emptyList());
         String path = "/api/v1/metrics:batchUpsert";
@@ -82,9 +85,13 @@ public class WebApiClient {
         return chain;
     }
 
+    /** IMPORTANT: retourne un Mono<Void> explicite. */
     private <T> Mono<Void> send(String path, List<T> payload) {
         byte[] body = Jsons.toBytes(payload);
         String idempotencyKey = UUID.randomUUID().toString();
+        int items = payload == null ? 0 : payload.size();
+        log.info("API POST {} (items={}, bytes={})", path, items, body.length);
+
         return webClient.post()
                 .uri(path)
                 .headers(h -> {
@@ -93,13 +100,21 @@ public class WebApiClient {
                 })
                 .body(BodyInserters.fromValue(payload))
                 .exchangeToMono(resp -> handle(resp, path))
-                .retryWhen(Retry.backoff(3, Duration.ofSeconds(2))
-                        .filter(t -> true));
+                .retryWhen(Retry.backoff(2, Duration.ofSeconds(1)));
     }
 
+    /** Transforme la réponse en Mono<Void> et loggue le code HTTP. */
     private Mono<Void> handle(ClientResponse resp, String path) {
-        if (resp.statusCode().is2xxSuccessful()) return Mono.empty();
+        int code = resp.statusCode().value();
+        if (resp.statusCode().is2xxSuccessful()) {
+            log.info("API {} -> {}", path, code);
+            // On lit/relâche le corps et on termine en Void
+            return resp.bodyToMono(Void.class);
+        }
         return resp.bodyToMono(String.class).defaultIfEmpty("")
-                .flatMap(b -> Mono.error(new RuntimeException("API " + path + " failed: " + resp.statusCode() + " body=" + b)));
+                .flatMap(b -> {
+                    log.warn("API {} -> {} body={}", path, code, b);
+                    return Mono.error(new RuntimeException("API " + path + " failed: " + code));
+                });
     }
 }

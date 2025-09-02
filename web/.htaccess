@@ -11,8 +11,15 @@
     text/vcard text/vnd.rim.location.xloc text/vtt text/x-component text/x-cross-domain-policy text/xml
 </IfModule>
 
+# --- Index par défaut ---
+DirectoryIndex index.php index.html
+
 # --- Sécurité : bloquer l’accès à .git (hérité) ---
 RedirectMatch 404 /\.git
+
+# --- Sécurité : ne pas exposer le back-end ---
+RedirectMatch 404 ^/src/back($|/)
+RedirectMatch 404 ^/src/back/config($|/)
 
 # --- Routage API uniquement sous /api/* ---
 <IfModule mod_rewrite.c>

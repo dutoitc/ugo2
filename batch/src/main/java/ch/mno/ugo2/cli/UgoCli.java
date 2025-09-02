@@ -8,6 +8,7 @@ import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
 import java.util.concurrent.Callable;
+// ... imports inchangés
 
 @Component
 public class UgoCli {
@@ -15,17 +16,23 @@ public class UgoCli {
   private final ApplicationArguments springArgs;
   private final BatchOrchestrator orchestrator;
   private final SanityCheckCommand sanityCmd;
+  private final SanitySourcesCommand sanitySourcesCmd;
 
-  public UgoCli(ApplicationArguments springArgs, BatchOrchestrator orchestrator, SanityCheckCommand sanityCmd) {
+  public UgoCli(ApplicationArguments springArgs,
+                BatchOrchestrator orchestrator,
+                SanityCheckCommand sanityCmd,
+                SanitySourcesCommand sanitySourcesCmd) {
     this.springArgs = springArgs;
     this.orchestrator = orchestrator;
     this.sanityCmd = sanityCmd;
+    this.sanitySourcesCmd = sanitySourcesCmd;
   }
 
   @PostConstruct
   void runIfArgsPresent() {
     if (springArgs.getSourceArgs().length == 0) return;
-    int exit = new CommandLine(new Root(orchestrator, sanityCmd)).execute(springArgs.getSourceArgs());
+    int exit = new CommandLine(new Root(orchestrator, sanityCmd, sanitySourcesCmd))
+            .execute(springArgs.getSourceArgs());
     System.exit(exit);
   }
 
@@ -33,8 +40,11 @@ public class UgoCli {
   static class Root implements Callable<Integer> {
     private final BatchOrchestrator orchestrator;
     private final SanityCheckCommand sanityCmd;
+    private final SanitySourcesCommand sanitySourcesCmd;
 
-    Root(BatchOrchestrator o, SanityCheckCommand s) { this.orchestrator = o; this.sanityCmd = s; }
+    Root(BatchOrchestrator o, SanityCheckCommand s, SanitySourcesCommand ss) {
+      this.orchestrator = o; this.sanityCmd = s; this.sanitySourcesCmd = ss;
+    }
 
     @Command(name="batch:init", description="Initial discovery (full scan), then reconcile")
     int init() { orchestrator.run(true); return 0; }
@@ -42,14 +52,14 @@ public class UgoCli {
     @Command(name="batch:run", description="Rolling discovery (last N days), then reconcile")
     int run() { orchestrator.run(false); return 0; }
 
-    @Command(name="sanity:check", description="Vérifie /health et l’auth HMAC (POST vide)")
+    @Command(name="sanity:check", description="Vérifie /health + auth HMAC")
     int sanityCheck() {
-      try {
-        return sanityCmd.call();
-      } catch (Exception e) {
-        System.err.println("sanity:check failed: " + e.getMessage());
-        return 1;
-      }
+      try { return sanityCmd.call(); } catch (Exception e) { System.err.println(e.getMessage()); return 1; }
+    }
+
+    @Command(name="sanity:sources", description="POST 1 source factice vers /sources:batchUpsert")
+    int sanitySources() {
+      try { return sanitySourcesCmd.call(); } catch (Exception e) { System.err.println(e.getMessage()); return 1; }
     }
 
     @Override public Integer call() { CommandLine.usage(this, System.out); return 0; }
