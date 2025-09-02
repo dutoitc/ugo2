@@ -1,71 +1,47 @@
 <?php
-/**
- * Router minimaliste (API v1).
- * - Dispatch exact sur méthode + chemin normalisé.
- * - 405 si chemin existe avec autre méthode.
- * - 404 sinon.
- * - OPTIONS renvoie 204 (préflight CORS basique).
- */
-
 declare(strict_types=1);
 
-// Dépendances de base
-require_once __DIR__ . '/Config.php';
-require_once __DIR__ . '/Db.php';
-require_once __DIR__ . '/Auth.php';
-require_once __DIR__ . '/Util.php';
+namespace Web;
 
-// Contrôleurs
-require_once __DIR__ . '/Controllers/HealthController.php';
-require_once __DIR__ . '/Controllers/SourcesIngestController.php';
-require_once __DIR__ . '/Controllers/MetricsIngestController.php';
-require_once __DIR__ . '/Controllers/OverridesController.php';
-require_once __DIR__ . '/Controllers/VideosController.php';
-require_once __DIR__ . '/Controllers/AggregatesController.php';
+use Web\Lib\Http;
 
 final class Router
 {
-    /** @var array<array{0:string,1:string,2:array{0:string,1:string}}>} */
-    private array $routes = [];
-
     private Db $db;
     private Auth $auth;
 
+    /** @var array<array{0:string,1:string,2:array{0:string,1:string}}>} */
+    private array $routes = [];
+
     public function __construct()
     {
-        $cfg = Config::load();
+        $cfg        = Config::load();
         $this->db   = new Db($cfg['db'] ?? []);
         $this->auth = new Auth($cfg);
 
-        // Table de routage
         $this->routes = [
             // Health
-            ['GET',  '/api/v1/health',                  ['Controllers\\HealthController', 'health']],
+            ['GET',  '/api/v1/health',                ['Web\\Controllers\\HealthController', 'health']],
 
             // Ingestion SOURCES
-            ['POST', '/api/v1/sources:batchUpsert',     ['Controllers\\SourcesIngestController', 'batchUpsert']],
-            ['POST', '/api/v1/sources:filterMissing',   ['Controllers\\SourcesIngestController', 'filterMissing']],
+            ['POST', '/api/v1/sources:filterMissing', ['Web\\Controllers\\SourcesIngestController', 'filterMissing']],
+            ['POST', '/api/v1/sources:batchUpsert',   ['Web\\Controllers\\SourcesIngestController', 'batchUpsert']],
 
-            // Ingestion METRICS
-            ['POST', '/api/v1/metrics:batchUpsert',     ['Controllers\\MetricsIngestController', 'batchUpsert']],
+            // Ingestion METRICS (écrit dans metric_snapshot)
+            ['POST', '/api/v1/metrics:batchUpsert',   ['Web\\Controllers\\MetricsIngestController', 'batchUpsert']],
 
-            // Overrides (admin)
-            ['POST', '/api/v1/overrides:apply',         ['Controllers\\OverridesController', 'apply']],
-
-            // Lecture (public/admin)
-            ['GET',  '/api/v1/videos',                  ['Controllers\\VideosController', 'list']],
-            ['GET',  '/api/v1/aggregates/presenters',   ['Controllers\\AggregatesController', 'presenters']],
-            ['GET',  '/api/v1/aggregates/directors',    ['Controllers\\AggregatesController', 'directors']],
+            // Lecture (tes contrôleurs statiques qui retournent un array)
+            ['GET',  '/api/v1/videos',                ['Web\\Controllers\\VideosController', 'list']],
+            ['GET',  '/api/v1/aggregates/presenters', ['Web\\Controllers\\AggregatesController', 'presenters']],
+            // "directors" côté API → méthode "realisateurs" côté code
+            ['GET',  '/api/v1/aggregates/directors',  ['Web\\Controllers\\AggregatesController', 'realisateurs']],
         ];
     }
 
-    private static function normalizePath(string $p): string
+    private static function normalize(string $path): string
     {
-        // supprime multiple slashes et trailing slash (sauf racine)
-        $p = preg_replace('#/+#', '/', $p) ?? $p;
-        if ($p !== '/' && str_ends_with($p, '/')) {
-            $p = rtrim($p, '/');
-        }
+        $p = preg_replace('#/+#', '/', $path) ?? $path;
+        if ($p !== '/' && str_ends_with($p, '/')) $p = rtrim($p, '/');
         return $p;
     }
 
@@ -73,7 +49,6 @@ final class Router
     {
         $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
-        // Préflight CORS simple
         if ($method === 'OPTIONS') {
             header('Access-Control-Allow-Origin: *');
             header('Access-Control-Allow-Methods: GET,POST,OPTIONS');
@@ -83,34 +58,46 @@ final class Router
         }
 
         $uriPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
-        $path    = self::normalizePath($uriPath);
+        $path    = self::normalize($uriPath);
 
         foreach ($this->routes as [$m, $r, $handler]) {
             if ($m === $method && $r === $path) {
                 [$class, $fn] = $handler;
-                /** @var object $controller */
+
+                // Si la méthode est statique et retourne un array -> on sérialise ici.
+                if (method_exists($class, $fn)) {
+                    $ref = new \ReflectionMethod($class, $fn);
+                    if ($ref->isStatic()) {
+                        $out = $class::$fn($this->db);
+                        if (is_array($out)) {
+                            Http::json($out, 200);
+                        } else {
+                            Http::json(['ok'=>true], 200);
+                        }
+                        return;
+                    }
+                }
+
+                // Sinon : instance qui gère elle-même la réponse (echo/json)
                 $controller = new $class($this->db, $this->auth);
                 $controller->$fn();
                 return;
             }
         }
 
-        // Si le chemin existe mais pas la méthode -> 405
+        // 405 si chemin existe avec autre méthode
         $allowed = [];
-        foreach ($this->routes as [$m, $r, $handler]) {
-            if ($r === $path) $allowed[] = $m;
-        }
-        if (!empty($allowed)) {
+        foreach ($this->routes as [$m, $r]) if ($r === $path) $allowed[] = $m;
+        if ($allowed) {
             header('Content-Type: application/json; charset=utf-8');
             header('Allow: ' . implode(',', array_unique($allowed)));
             http_response_code(405);
-            echo json_encode(['ok' => false, 'error' => 'method_not_allowed'], JSON_UNESCAPED_UNICODE);
+            echo json_encode(['error' => 'method_not_allowed'], JSON_UNESCAPED_UNICODE);
             return;
         }
 
-        // 404
         header('Content-Type: application/json; charset=utf-8');
         http_response_code(404);
-        echo json_encode(['ok' => false, 'error' => 'not_found'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['error' => 'not_found ' . $path . ' / ' . $uriPath . ' / ' . $path], JSON_UNESCAPED_UNICODE);
     }
 }

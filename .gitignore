@@ -35,3 +35,5 @@ replay_pid*
 /web/src/back/config/config.php.*
 /web/up-capstv.sh
 /batch/src/main/resources/application.properties
+/.ugo2
+chk.php

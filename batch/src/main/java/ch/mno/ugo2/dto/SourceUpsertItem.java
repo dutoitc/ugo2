@@ -1,4 +1,5 @@
 package ch.mno.ugo2.dto;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import lombok.Builder;
 import lombok.Data;
@@ -17,4 +18,9 @@ public class SourceUpsertItem {
     private Integer is_teaser;        // 0/1
     private Long video_id;            // nullable
     private Integer locked;           // 0/1
+
+    @JsonProperty("externalId")
+    public String getExternalId() {
+        return platform_source_id;
+    }
 }

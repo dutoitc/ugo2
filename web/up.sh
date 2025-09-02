@@ -107,6 +107,7 @@ FILTERS=(
   "--include=/src/***"
   "--include=/.htaccess"
   "--include=/index.php"
+  "--include=/chk.php"
   "--exclude=*"
 )
 

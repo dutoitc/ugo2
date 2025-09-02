@@ -12,13 +12,12 @@ import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
 import java.time.Duration;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -72,6 +71,49 @@ public class WebApiClient {
         return sendChunked("/api/v1/overrides:apply", items);
     }
 
+    /** Retourne la liste des IDs manquants pour une plateforme donnée. */
+    public Mono<List<String>> filterMissingSources(String platform, List<String> ids) {
+        if (ids == null || ids.isEmpty()) return Mono.just(List.of());
+        final String path = "/api/v1/sources:filterMissing";
+
+        Map<String, Object> req = new HashMap<>();
+        req.put("platform", platform);
+        req.put("externalIds", ids);
+
+        byte[] body = Jsons.toBytes(req);
+        log.info("API POST {} (check ids={})", path, ids.size());
+
+        return webClient.post()
+                .uri(path)
+                .headers(h -> {
+                    signer.sign(h, "POST", path, body);
+                    h.set("Idempotency-Key", UUID.randomUUID().toString());
+                })
+                .body(BodyInserters.fromValue(req))
+                .retrieve()
+                .bodyToMono(FilterMissingResp.class)
+                .map(resp -> {
+                    if (resp == null || resp.missing == null) return List.<String>of();
+                    // Force List<String> propre, même si le JSON était non typé
+                    List<String> out = new ArrayList<>(resp.missing.size());
+                    for (Object o : resp.missing) out.add(String.valueOf(o));
+                    return out;
+                })
+                .doOnError(WebClientResponseException.class, e ->
+                        log.warn("API {} -> {} body={}", path, e.getRawStatusCode(), e.getResponseBodyAsString()));
+    }
+
+    /** DTO JSON pour /sources:filterMissing */
+    public static class FilterMissingResp {
+        public boolean ok;
+        public String platform;
+        public Integer requested;
+        public Integer known;
+        public List<String> missing; // bien typé
+    }
+
+    // -------- internals --------
+
     private <T> Mono<Void> sendChunked(String path, List<T> all) {
         if (all == null || all.isEmpty()) return Mono.empty();
         int from = 0;
@@ -85,7 +127,6 @@ public class WebApiClient {
         return chain;
     }
 
-    /** IMPORTANT: retourne un Mono<Void> explicite. */
     private <T> Mono<Void> send(String path, List<T> payload) {
         byte[] body = Jsons.toBytes(payload);
         String idempotencyKey = UUID.randomUUID().toString();
@@ -103,12 +144,10 @@ public class WebApiClient {
                 .retryWhen(Retry.backoff(2, Duration.ofSeconds(1)));
     }
 
-    /** Transforme la réponse en Mono<Void> et loggue le code HTTP. */
     private Mono<Void> handle(ClientResponse resp, String path) {
         int code = resp.statusCode().value();
         if (resp.statusCode().is2xxSuccessful()) {
             log.info("API {} -> {}", path, code);
-            // On lit/relâche le corps et on termine en Void
             return resp.bodyToMono(Void.class);
         }
         return resp.bodyToMono(String.class).defaultIfEmpty("")
