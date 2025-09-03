@@ -30,11 +30,15 @@ final class Router
             ['POST', '/api/v1/sources:filterMissing', ['Web\\Controllers\\SourcesIngestController', 'filterMissing']],
             ['POST', '/api/v1/sources:batchUpsert',   ['Web\\Controllers\\SourcesIngestController', 'batchUpsert']],
 
+            // Others
+            ['POST', '/api/v1/reconcile:run',         ['Web\\Controllers\\ReconcileController', 'run']],
+
             // Ingestion METRICS
             ['POST', '/api/v1/metrics:batchUpsert',   ['Web\\Controllers\\MetricsIngestController', 'batchUpsert']],
 
             // Lecture
             ['GET',  '/api/v1/videos',                ['Web\\Controllers\\VideosController', 'list']],
+            ['GET',  '/api/v1/video',                 ['Web\\Controllers\\VideosController', 'get']],
             ['GET',  '/api/v1/aggregates/presenters', ['Web\\Controllers\\AggregatesController', 'presenters']],
             ['GET',  '/api/v1/aggregates/directors',  ['Web\\Controllers\\AggregatesController', 'realisateurs']],
         ];
