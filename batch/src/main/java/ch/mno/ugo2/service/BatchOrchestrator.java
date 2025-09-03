@@ -5,11 +5,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.java.Log;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-
-@Service
 @Log
+@Service
 @RequiredArgsConstructor
 public class BatchOrchestrator {
 
@@ -18,30 +15,18 @@ public class BatchOrchestrator {
     private final WebApiSinkService webApiSinkService;
 
     /**
-     * Pipeline unique:
-     *  1) Discover (YouTube + Facebook): upsert des sources + métriques (baseline + courant)
-     *  2) Réconciliation côté API: crée/lie video_id sur la fenêtre glissante
+     * Nouvelle règle: batch:run charge TOUT l'historique (pas de fenêtre glissante).
+     * Puis on déclenche la réconciliation côté API sur TOUTES les sources
+     * (from/to non renseignés) avec un "hoursWindow" issu de la config.
      */
     public void run() {
-        final int days = cfg.getBatch().getRollingDays();
-        final int hoursWindow = cfg.getBatch().getHoursWindow();
-
-        var to   = LocalDateTime.now();
-        var from = to.minusDays(days);
-
-        log.info(() -> String.format("[batch] start window=%s .. %s (days=%d)", from, to, days));
-
         int pushedSnapshots = discoveryService.discover();
         log.info(() -> String.format("[batch] discovery done, pushedSnapshots=%d — launching API reconciliation…", pushedSnapshots));
 
-        // Réconciliation côté API (DB en ligne) — crée/lie video_id
-        webApiSinkService.runReconcile(
-                from.atZone(ZoneOffset.UTC).toInstant(),
-                to  .atZone(ZoneOffset.UTC).toInstant(),
-                hoursWindow,
-                false // dryRun=false => applique les liens video_id
-        );
+        // Réconciliation côté API (DB en ligne) — crée/lie video_id sur l'ensemble des sources
+        int hoursWindow = cfg.getBatch().hoursWindow;
+        webApiSinkService.runReconcileAll(hoursWindow, false);
 
-        log.info("[batch] reconcile (API sink) triggered");
+        log.info("[batch] reconcile (API sink) triggered for ALL sources (no time window)");
     }
 }

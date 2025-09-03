@@ -27,9 +27,10 @@ public class YouTubeCollectorService {
     private final WebApiSinkService sink;
     private final WebApiClient api;
 
+    /** Charge l'historique complet pour tous les channels configurés. */
     public int collect() {
         var chs = props.getChannelIds();
-        log.debug("YT collect, channels={}",  chs);
+        log.debug("YT collect, channels={}", chs);
         if (props.getApiKey() == null || props.getApiKey().isBlank()) {
             log.warn("YouTube API key missing — skipping");
             return 0;
@@ -50,95 +51,83 @@ public class YouTubeCollectorService {
         return totalMetrics;
     }
 
-    private record Collected(int sources, int metrics) {
-    }
+    private record Collected(int sources, int metrics) {}
 
+    /** Collecte tout l'historique d'un channel (playlist 'uploads'), sans cutoff. */
     private Collected collectChannel(String channelId) {
         int pushedSources = 0;
         int pushedMetrics = 0;
         try {
             Path statePath = Path.of(props.getStateDir(), "youtube-" + channelId + ".json");
             JsonStateStore state = new JsonStateStore(statePath);
-            LocalDateTime cutoff =
-                    LocalDate.now(ZoneOffset.UTC).minusDays(props.getWindowDaysRolling()).atStartOfDay();
-            log.debug("YT channel={}, cutoff={}", channelId,  cutoff);
+
+            log.debug("YT channel={}, full history (no cutoff)", channelId);
 
             String uploads = fetchUploadsPlaylistId(channelId);
-            log.debug("YT uploads playlistId={}", uploads);
-            if (uploads == null) {
-                log.warn("No uploads playlist for {}", channelId);
+            if (uploads == null || uploads.isBlank()) {
+                log.warn("YT channel={} has no uploads playlist — skipping", channelId);
                 return new Collected(0, 0);
             }
 
             List<String> videoIds = new ArrayList<>();
             String pageToken = null;
             int pages = 0;
-            boolean stopByCutoff = false;
 
             while (true) {
-                String etagKey = "pl:" + uploads + ":" + (pageToken == null ? "" : pageToken);
-                // IMPORTANT : pas d'ETag en mode init (sinon 304 et 0 résultat)
-                String etag = state.getEtag(etagKey);
-                log.debug("YT page request uploads={}, token={}, etag={}", uploads, pageToken, etag);
-
-                JsonNode page = yt.playlistItems(props.getApiKey(), uploads, props.getPageSize(), pageToken, etag).block();
-                if (page == null) { // 304
-                    log.debug("YT page {} -> 304 Not Modified", etagKey);
-                    break;
-                }
                 pages++;
+                // ✅ signature: (apiKey, playlistId, Integer maxResults, String pageToken, String etag)
+                JsonNode page = yt.playlistItems(
+                        props.getApiKey(),
+                        uploads,
+                        props.getPageSize(),
+                        pageToken,
+                        null
+                ).block();
 
-                String newEtag = page.path("etag").asText(null);
-                if (newEtag != null) {
-                    state.setEtag(etagKey, newEtag);
+                if (page == null) {
+                    log.warn("YT channel={} playlistItems returned null page (page={})", channelId, pages);
+                    break;
                 }
 
                 int before = videoIds.size();
                 for (JsonNode item : page.path("items")) {
                     JsonNode cd = item.path("contentDetails");
                     String vid = cd.path("videoId").asText(null);
-                    String published = item.path("snippet").path("publishedAt").asText(null);
-                    LocalDateTime pAt = parseInstant(published);
-
-                    if (pAt != null && pAt.isBefore(cutoff)) {
-                        stopByCutoff = true;
-                        break; // stop lire items de cette page, et on sortra du while après
-                    }
                     if (vid != null) videoIds.add(vid);
-                    if (props.getMaxVideosPerRun() > 0 && videoIds.size() >= props.getMaxVideosPerRun()) {
-                        stopByCutoff = true;
-                        break;
-                    }
                 }
                 int added = videoIds.size() - before;
-                log.debug("YT page {}: items+={} (total={})", pages, added, videoIds.size());
+                log.debug("YT channel={} page {}: items+={} (total={})", channelId, pages, added, videoIds.size());
 
-                if (stopByCutoff || (props.getMaxVideosPerRun() > 0 && videoIds.size() >= props.getMaxVideosPerRun()))
-                    break;
                 pageToken = page.path("nextPageToken").asText(null);
                 if (pageToken == null) break;
             }
 
-            log.info("YouTube scanning: pages={}, collectedIds={}", pages, videoIds.size());
             if (videoIds.isEmpty()) {
-                state.save();
+                log.info("YT channel={} no videos found in uploads", channelId);
                 return new Collected(0, 0);
             }
 
             var res = enrichAndPush(state, videoIds);
-            state.save();
-            log.info("YouTube channel {}: pushedSources={}, pushedMetrics={}", channelId, res.sources, res.metrics);
-            return res;
+            pushedSources += res.sources;
+            pushedMetrics += res.metrics;
+
+            try { state.save(); } catch (Exception e) {
+                log.warn("YT channel={} state save failed: {}", channelId, e.toString());
+            }
+
+            log.info("YT channel={} done: pushedSources={}, pushedMetrics={}", channelId, pushedSources, pushedMetrics);
         } catch (Exception e) {
-            log.warn("collectChannel failed for {}: {}", channelId, e.toString());
-            return new Collected(0, 0);
+            log.warn("YT channel={} failed", channelId, e);
         }
+        return new Collected(pushedSources, pushedMetrics);
     }
 
+    /** Enrichit et pousse par tranches (videos.list), logique existante. */
     private Collected enrichAndPush(JsonStateStore state, List<String> videoIds) {
         int sourcesCount = 0;
         int metricsCount = 0;
         final int CHUNK = 50;
+
         for (int i = 0; i < videoIds.size(); i += CHUNK) {
             List<String> slice = videoIds.subList(i, Math.min(i + CHUNK, videoIds.size()));
             JsonNode v = yt.videosList(props.getApiKey(), slice).block();
@@ -150,7 +139,7 @@ public class YouTubeCollectorService {
                 String id = it.path("id").asText(null);
                 if (id != null) idsSlice.add(id);
             }
-            // 2) Quels manquent côté API ?
+            // 2) Quels manquent côté API distante ?
             List<String> missing = api.filterMissingSources("YOUTUBE", idsSlice).block();
             Set<String> missingSet = new HashSet<>(missing == null ? List.of() : missing);
             log.debug("YT slice: ids={}, missing={}", idsSlice.size(), missingSet.size());
@@ -180,7 +169,7 @@ public class YouTubeCollectorService {
                             .permalink_url("https://www.youtube.com/watch?v=" + id)
                             .media_type(isShort ? "SHORT" : "VIDEO")
                             .duration_seconds(durationSec)
-                            .published_at(publishedAt == null ? null : publishedAt.toString())
+                            .published_at(publishedAt == null ? null : toUtcIso(publishedAt))
                             .is_teaser(teaser ? 1 : 0)
                             .video_id(null)
                             .locked(0)
@@ -191,7 +180,7 @@ public class YouTubeCollectorService {
                         metrics.add(MetricsUpsertItem.builder()
                                 .platform("YOUTUBE")
                                 .platform_source_id(id)
-                                .captured_at(publishedAt.toString())
+                                .captured_at(toUtcIso(publishedAt))
                                 .views_3s(0)
                                 .views_platform_raw(0)
                                 .comments(0)
@@ -202,9 +191,9 @@ public class YouTubeCollectorService {
                     }
                 }
 
-                // Snapshot courant (delta/plancher)
-                Integer viewsRaw = st.hasNonNull("viewCount") ? st.get("viewCount").asInt() : null;
-                Integer likes = st.hasNonNull("likeCount") ? st.get("likeCount").asInt() : null;
+                // Snapshot courant (avec plancher quotidien inconditionnel)
+                Integer viewsRaw = st.hasNonNull("viewCount")    ? st.get("viewCount").asInt()    : null;
+                Integer likes    = st.hasNonNull("likeCount")    ? st.get("likeCount").asInt()    : null;
                 Integer comments = st.hasNonNull("commentCount") ? st.get("commentCount").asInt() : null;
 
                 if (shouldSend(state, id, viewsRaw)) {
@@ -243,6 +232,12 @@ public class YouTubeCollectorService {
         return new Collected(sourcesCount, metricsCount);
     }
 
+    /**
+     * ⚠️ Nouveau comportement:
+     * - On envoie toujours au moins 1 snapshot par jour (si pas encore fait aujourd'hui),
+     *   même sans delta de vues.
+     * - Sinon, on envoie s'il y a un delta positif.
+     */
     private boolean shouldSend(JsonStateStore state, String videoId, Integer viewsRaw) {
         var vs = state.getVideoState(videoId);
         Integer last = vs.get("lastSentViews") == null ? null : ((Number) vs.get("lastSentViews")).intValue();
@@ -250,13 +245,13 @@ public class YouTubeCollectorService {
         LocalDate lastAt = lastAtS == null ? null : LocalDate.parse(lastAtS);
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
 
-        if (last == null) return true; // première fois
+        // 1) pas encore envoyé: envoyer
+        if (last == null) return true;
+        // 2) plancher quotidien inconditionnel: 1/jour
+        if (lastAt == null || !lastAt.equals(today)) return true;
+        // 3) sinon, envoyer seulement si delta positif
         if (viewsRaw == null) return false;
-        int abs = viewsRaw - last;
-        double rel = last == 0 ? 1.0 : (viewsRaw - last) / (double) last;
-        if (abs >= props.getMinDeltaAbs() || rel >= props.getMinDeltaRel()) return true;
-        if (props.isDailyFloor() && (lastAt == null || !lastAt.equals(today))) return true;
-        return false;
+        return viewsRaw > last;
     }
 
     private String fetchUploadsPlaylistId(String channelId) {
@@ -278,19 +273,13 @@ public class YouTubeCollectorService {
         }
     }
 
-
-    /**
-     * ISO-8601 UTC (Z) pour "maintenant", sans millisecondes.
-     */
+    /** ISO-8601 UTC (Z) pour "maintenant", sans millisecondes. */
     private static String nowUtcIso() {
         return OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS).toString();
     }
 
-    /**
-     * Convertit un LocalDateTime (UTC) en ISO-8601 UTC (Z) sans millisecondes.
-     */
+    /** Convertit un LocalDateTime (UTC) en ISO-8601 UTC (Z) sans millisecondes. */
     private static String toUtcIso(LocalDateTime ldtUtc) {
         return OffsetDateTime.of(ldtUtc, ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS).toString();
     }
-
 }

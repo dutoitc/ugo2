@@ -162,15 +162,44 @@ final class ReconcileController
         return null;
     }
 
-    private function pickCanonical(array $items): array {
-        usort($items, fn($a,$b)=> mb_strlen((string)($b['title']??'')) <=> mb_strlen((string)($a['title']??'')));
-        $title = (string)($items[0]['title'] ?? '(sans titre)');
-        usort($items, fn($a,$b)=> mb_strlen((string)($b['description']??'')) <=> mb_strlen((string)($a['description']??'')));
-        $desc  = (string)($items[0]['description'] ?? '');
-        $cands = array_values(array_filter($items, fn($it)=> (int)($it['is_teaser']??0)===0));
-        if (!$cands) $cands = $items;
-        usort($cands, fn($a,$b)=> strcmp((string)$a['published_at'], (string)$b['published_at']));
-        $officialAt = (string)($cands[0]['published_at'] ?? date('Y-m-d H:i:s'));
-        return [$title,$desc,$officialAt];
-    }
+       private function pickCanonical(array $items): array {
+           // 1) Titre: priorité YouTube si dispo et non-vide, sinon fallback "longest non-empty"
+           $ytTitleItems = array_values(array_filter($items, function($it){
+               $p = strtoupper((string)($it['platform'] ?? ''));
+               $t = trim((string)($it['title'] ?? ''));
+               return $p === 'YOUTUBE' && $t !== '';
+           }));
+           if ($ytTitleItems) {
+               $title = (string)$ytTitleItems[0]['title'];
+           } else {
+               $candsTitle = array_values(array_filter($items, fn($it)=> trim((string)($it['title']??'')) !== ''));
+               if (!$candsTitle) $candsTitle = $items;
+               usort($candsTitle, fn($a,$b)=> mb_strlen((string)($b['title']??'')) <=> mb_strlen((string)($a['title']??'')));
+               $title = (string)($candsTitle[0]['title'] ?? '(sans titre)');
+           }
+
+           // 2) Description: priorité YouTube si dispo et non-vide, sinon fallback "longest non-empty"
+           $ytDescItems = array_values(array_filter($items, function($it){
+               $p = strtoupper((string)($it['platform'] ?? ''));
+               $d = trim((string)($it['description'] ?? ''));
+               return $p === 'YOUTUBE' && $d !== '';
+           }));
+           if ($ytDescItems) {
+               $desc = (string)$ytDescItems[0]['description'];
+           } else {
+               $candsDesc = array_values(array_filter($items, fn($it)=> trim((string)($it['description']??'')) !== ''));
+               if (!$candsDesc) $candsDesc = $items;
+               usort($candsDesc, fn($a,$b)=> mb_strlen((string)($b['description']??'')) <=> mb_strlen((string)($a['description']??'')));
+               $desc  = (string)($candsDesc[0]['description'] ?? '');
+           }
+
+           // 3) Date "officielle" = plus ancienne parmi les non-teasers (sinon plus ancienne tout court)
+           $cands = array_values(array_filter($items, fn($it)=> (int)($it['is_teaser']??0)===0));
+           if (!$cands) $cands = $items;
+           usort($cands, fn($a,$b)=> strcmp((string)$a['published_at'], (string)$b['published_at']));
+           $officialAt = (string)($cands[0]['published_at'] ?? date('Y-m-d H:i:s'));
+
+           return [$title,$desc,$officialAt];
+       }
+
 }

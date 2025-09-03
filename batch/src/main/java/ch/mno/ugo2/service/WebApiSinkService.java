@@ -25,23 +25,32 @@ public class WebApiSinkService {
         client.batchUpsertSources(items).block();
         log.info("Pushed {} sources", items.size());
     }
+
     public void pushMetrics(List<MetricsUpsertItem> items) {
         if (items == null || items.isEmpty()) return;
-        var payload = dedup(items);
-        int suppressed = items.size() - payload.size();
-        if (suppressed > 0) log.warn("pushMetrics: {} duplicates supprimés (même platform+source+captured_at)", suppressed);
+        List<MetricsUpsertItem> payload = dedup(items);
         client.batchUpsertMetrics(payload).block();
         log.info("Pushed {} metric snapshots", items.size());
     }
+
     public void applyOverrides(List<OverrideItem> items) {
         if (items == null || items.isEmpty()) return;
         client.applyOverrides(items).block();
         log.info("Applied {} overrides", items.size());
     }
 
+    /** Compat: exécuter une réconciliation bornée si on nous passe des bornes. */
     public void runReconcile(Instant from, Instant to, int hoursWindow, boolean dryRun) {
-        client.runReconcile(from.toString(), to.toString(), hoursWindow, dryRun).block();
+        client.runReconcile(from == null ? null : from.toString(),
+                to   == null ? null : to.toString(),
+                hoursWindow, dryRun).block();
     }
+
+    /** Nouvelle méthode: réconciliation sur l'ensemble des sources (pas de bornes temporelles). */
+    public void runReconcileAll(int hoursWindow, boolean dryRun) {
+        client.runReconcile(null, null, hoursWindow, dryRun).block();
+    }
+
     List<MetricsUpsertItem> dedup(List<MetricsUpsertItem> in) {
         Map<String, MetricsUpsertItem> uniq = new LinkedHashMap<>();
         for (var m : in) {
@@ -53,5 +62,4 @@ public class WebApiSinkService {
         }
         return new ArrayList<>(uniq.values());
     }
-
 }

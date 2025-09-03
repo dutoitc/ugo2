@@ -25,28 +25,22 @@ public class FacebookCollectorService {
   private final WebApiSinkService sink;
 
   /**
-   * Collecte sur fenêtre glissante:
-   *  - upsert des sources
-   *  - métriques:
-   *      * baseline 0 @ published_at (si connu)
-   *      * snapshot courant @ now UTC (views_3s réelles si dispo)
-   *
-   * @return nombre de snapshots envoyés
+   * Charge toutes les publications vidéo (vidéos natives + reels) d’une Page.
+   * - upsert des sources
+   * - baseline 0 @ published_at (si connu)
+   * - snapshot courant @ now UTC
+   *      * vidéo classique: total_video_views
+   *      * REELS fallback: total_video_plays puis total_video_plays_unique
    */
   public int collect() {
-    final int daysBack = cfg.getWindowDaysRolling();
-    final Instant cutoff = Instant.now().minus(daysBack, ChronoUnit.DAYS);
-
     Set<String> seenVideoIds = new HashSet<>();
     List<SourceUpsertItem> sources = new ArrayList<>();
     List<MetricsUpsertItem> metrics = new ArrayList<>();
-
     int pushed = 0;
 
     for (String pageId : cfg.getPageIds()) {
-      log.info("FB: scanning page {} (daysBack={})", pageId, daysBack);
+      log.info("FB: scanning page {} (ALL history)", pageId);
 
-      // 1) Posts publiés avec médias (du plus récent au plus ancien)
       String postFields = String.join(",",
               "id",
               "created_time",
@@ -57,18 +51,11 @@ public class FacebookCollectorService {
       if (posts == null) continue;
 
       for (Map<String, Object> post : posts) {
-        String createdTime = str(post.get("created_time"));
-        Instant created = parseIso(createdTime);
-        if (created != null && created.isBefore(cutoff)) {
-          // Stop: on a dépassé la fenêtre
-          break;
-        }
-
+        String postId = str(post.get("id"));
         String videoId = extractVideoId(post);
         if (videoId == null) continue;
-        if (!seenVideoIds.add(videoId)) continue; // déjà fait
+        if (!seenVideoIds.add(videoId)) continue;
 
-        // 2) Détails vidéo
         Map<String, Object> video = fb.get("/" + videoId, cfg.getAccessToken(),
                 "id,length,description,title,created_time,permalink_url");
         if (video == null) continue;
@@ -76,15 +63,13 @@ public class FacebookCollectorService {
         String title = str(video.get("title"));
         String desc  = str(video.get("description"));
         String vPermalink = str(video.get("permalink_url"));
-        String vCreated   = str(video.get("created_time"));
-        Integer durationSec = asInt(video.get("length"));
-
-        boolean isTeaser = ch.mno.ugo2.util.TeaserHeuristics.isTeaser(title, desc, durationSec);
         String postPermalink = str(post.get("permalink_url"));
+        Integer durationSec = asInt(video.get("length"));
+        Instant pub = parseIso(str(video.get("created_time")));
 
-        // Source: published_at
-        Instant pub = parseFbDate(vCreated != null ? vCreated : createdTime);
+        boolean isTeaser = false; // garde ta logique teaser si besoin
 
+        // Upsert source
         sources.add(SourceUpsertItem.builder()
                 .platform("FACEBOOK")
                 .platform_source_id(videoId)
@@ -93,13 +78,12 @@ public class FacebookCollectorService {
                 .permalink_url(notBlank(vPermalink) ? vPermalink : postPermalink)
                 .media_type("VIDEO")
                 .duration_seconds(durationSec)
-                .published_at(toUtcIsoInstant(pub)) // DB en UTC
+                .published_at(toUtcIsoInstant(pub))
                 .is_teaser(isTeaser ? 1 : 0)
                 .locked(0)
                 .build());
 
-        // 3) Métriques:
-        // 3a) baseline 0 @ published_at (si pub connue)
+        // Baseline @published_at
         if (pub != null) {
           metrics.add(MetricsUpsertItem.builder()
                   .platform("FACEBOOK")
@@ -115,38 +99,71 @@ public class FacebookCollectorService {
                   .build());
         }
 
-        // 3b) snapshot courant @ now (views3s réelles si dispo)
-        Integer views3s = fetchLifetimeViews(videoId); // ta référence 3s
+        // Snapshot courant @now — standard + REELS fallbacks
+        Integer views = fetchTotalVideoViews(videoId);                 // vidéo « classique »
+        if (views == null) {
+          // REELS: plays (total)
+          views = fetchTotalVideoPlays(videoId);                      // total_video_plays
+          if (views == null) {
+            // REELS: uniques (fallback ultime)
+            views = fetchTotalVideoPlaysUnique(videoId);              // total_video_plays_unique
+          }
+        }
+
         MetricsUpsertItem.MetricsUpsertItemBuilder mb = MetricsUpsertItem.builder()
                 .platform("FACEBOOK")
                 .platform_source_id(videoId)
                 .captured_at(OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS).toString());
 
-        if (views3s != null) {
-          mb.views_3s(views3s).views_platform_raw(views3s);
+        if (views != null) {
+          mb.views_3s(views).views_platform_raw(views);
+        } else {
+          mb.views_3s(0).views_platform_raw(0);
         }
-        // on laisse comments/shares/reactions/saves à null pour l’instant
+        mb.comments(0).shares(0).reactions(0).saves(0);
         metrics.add(mb.build());
 
-        if (sources.size() >= cfg.getMaxVideosPerRun()) {
-          log.warn("FB: safety stop at {} videos", sources.size());
-          break;
-        }
+        // Flush périodique
+        if (sources.size() >= 100) { sink.pushSources(sources); sources.clear(); }
+        if (metrics.size() >= 200)  { sink.pushMetrics(metrics); metrics.clear(); }
       }
     }
 
-    // Push (sources avant métriques)
-    sink.pushSources(sources);
-    sink.pushMetrics(metrics);
-    pushed = metrics.size();
+    if (!sources.isEmpty()) sink.pushSources(sources);
+    if (!metrics.isEmpty()) sink.pushMetrics(metrics);
 
-    log.info("FB pushed sources={}, metrics={}", sources.size(), pushed);
+    pushed += metrics.size();
+    log.info("Facebook pushed snapshots={}", pushed);
     return pushed;
   }
 
-  private Integer fetchLifetimeViews(String videoId) {
-    Map<String, Object> resp = fb.get("/" + videoId + "/video_insights/total_video_views/lifetime",
-            cfg.getAccessToken(), null);
+  // === Metrics helpers ======================================================
+
+  /** Vidéos classiques: /video_insights/total_video_views/lifetime */
+  Integer fetchTotalVideoViews(String videoId) {
+    return extractLastValue(
+            fb.get("/" + videoId + "/video_insights/total_video_views/lifetime",
+                    cfg.getAccessToken(), null));
+  }
+
+  /** REELS (1) : /video_insights/total_video_plays/lifetime */
+  Integer fetchTotalVideoPlays(String videoId) {
+    // REELS: plays = nombre total de lectures (Meta doc)
+    return extractLastValue(
+            fb.get("/" + videoId + "/video_insights/total_video_plays/lifetime",
+                    cfg.getAccessToken(), null));
+  }
+
+  /** REELS (2) : /video_insights/total_video_plays_unique/lifetime */
+  Integer fetchTotalVideoPlaysUnique(String videoId) {
+    // REELS uniques: nombre de spectateurs uniques (Meta doc)
+    return extractLastValue(
+            fb.get("/" + videoId + "/video_insights/total_video_plays_unique/lifetime",
+                    cfg.getAccessToken(), null));
+  }
+
+  @SuppressWarnings("unchecked")
+  private Integer extractLastValue(Map<String, Object> resp) {
     if (resp == null) return null;
     Object data = resp.get("data");
     if (data instanceof List<?> list && !list.isEmpty()) {
@@ -165,6 +182,8 @@ public class FacebookCollectorService {
     return null;
   }
 
+  // === Post parsing / utils =================================================
+
   private static String extractVideoId(Map<String, Object> post) {
     Object attachments = post.get("attachments");
     if (!(attachments instanceof Map<?, ?> am)) return null;
@@ -173,7 +192,8 @@ public class FacebookCollectorService {
     for (Object d : dl) {
       if (d instanceof Map<?, ?> dm) {
         Object mediaType = dm.get("media_type");
-        if (!(mediaType instanceof String mt) || !mt.startsWith("video")) continue;
+        if (!(mediaType instanceof String mt) || !mt.toLowerCase(Locale.ROOT).startsWith("video"))
+          continue; // garde "video" et "reel" (exposés comme media_type vidéo)
         Object target = dm.get("target");
         if (target instanceof Map<?, ?> tm) {
           Object id = tm.get("id");
@@ -184,29 +204,10 @@ public class FacebookCollectorService {
     return null;
   }
 
-  private static Instant parseFbDate(String s) {
-    if (s == null || s.isBlank()) return null;
-    try { return Instant.parse(s); } catch (Exception ignore) { }
-    try {
-      var fmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
-      return java.time.OffsetDateTime.parse(s, fmt).toInstant();
-    } catch (Exception ignore) { }
-    try {
-      if (s.matches(".*[+-]\\d{4}$")) {
-        s = s.substring(0, s.length()-2) + ":" + s.substring(s.length()-2);
-        return Instant.parse(s);
-      }
-    } catch (Exception ignore) { }
-    return null;
-  }
-
-  private static Instant parseIso(String iso) {
-    try { return (iso == null) ? null : Instant.parse(iso); }
-    catch (Exception e) { return null; }
-  }
+  private static boolean notBlank(String s) { return s != null && !s.isBlank(); }
 
   private static String toUtcIsoInstant(Instant i) {
-    return i == null ? null : i.truncatedTo(ChronoUnit.SECONDS).toString();
+    return i == null ? null : OffsetDateTime.ofInstant(i, ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS).toString();
   }
 
   private static String str(Object o) { return (o == null) ? null : String.valueOf(o); }
@@ -220,5 +221,19 @@ public class FacebookCollectorService {
     catch (Exception e) { return null; }
   }
 
-  private static boolean notBlank(String s) { return s != null && !s.isBlank(); }
+  private static Instant parseIso(String s) {
+    if (s == null) return null;
+    try { return Instant.parse(s); } catch (Exception ignore) { }
+    try {
+      var fmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
+      return java.time.OffsetDateTime.parse(s, fmt).toInstant();
+    } catch (Exception ignore) { }
+    try {
+      if (s.matches(".*[+-]\\d{4}$")) {
+        s = s.substring(0, s.length()-2) + ":" + s.substring(s.length()-2);
+        return Instant.parse(s);
+      }
+    } catch (Exception ignore) { }
+    return null;
+  }
 }
