@@ -97,6 +97,9 @@ final class MetricsIngestController
             $this->putIfExistsInt($row, $cols, 'favorites',           $s, ['favorites','favoriteCount','favorite_count']);
             $this->putIfExistsInt($row, $cols, 'watch_time_seconds',  $s, ['watch_time_seconds','watchTime','watch_time']);
             $this->putIfExistsInt($row, $cols, 'engagements',         $s, ['engagements','engagement_count']); // si présent dans ton schéma
+            $this->putIfExistsInt($row, $cols, 'views_3s',           $s, ['views_3s','views3s','total_video_views','totalVideoViews','viewCount','views']);
+            $this->putIfExistsInt($row, $cols, 'views_platform_raw', $s, ['views_platform_raw','viewsRaw','total_video_views','viewCount']);
+            $this->putIfExistsInt($row, $cols, 'saves',              $s, ['saves','save_count','saveCount']);
 
             // Construction SQL dynamique + ON DUPLICATE
             $colNames = array_keys($row);
@@ -159,6 +162,9 @@ final class MetricsIngestController
             'favorites'          => $get(['favorites','favorite_count','favoriteCount']),
             'watch_time_seconds' => $get(['watch_time_seconds','watch_time','watchTime']),
             'engagements'        => $get(['engagements','engagement_count']),
+            'views_3s'           => $get(['views_3s','views3s','total_video_views','totalVideoViews','viewCount','views']),
+            'views_platform_raw' => $get(['views_platform_raw','viewsRaw','total_video_views','viewCount']),
+            'saves'              => $get(['saves','save_count','saveCount']),
         ];
     }
 

@@ -8,7 +8,6 @@ import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
 import java.util.concurrent.Callable;
-// ... imports inchangés
 
 @Component
 public class UgoCli {
@@ -46,20 +45,22 @@ public class UgoCli {
       this.orchestrator = o; this.sanityCmd = s; this.sanitySourcesCmd = ss;
     }
 
-    @Command(name="batch:init", description="Initial discovery (full scan), then reconcile")
-    int init() { orchestrator.run(true); return 0; }
-
     @Command(name="batch:run", description="Rolling discovery (last N days), then reconcile")
-    int run() { orchestrator.run(false); return 0; }
+    int run() {
+      orchestrator.run();
+      return 0;
+    }
 
     @Command(name="sanity:check", description="Vérifie /health + auth HMAC")
     int sanityCheck() {
-      try { return sanityCmd.call(); } catch (Exception e) { System.err.println(e.getMessage()); return 1; }
+      try { return sanityCmd.call(); }
+      catch (Exception e) { System.err.println(e.getMessage()); return 1; }
     }
 
     @Command(name="sanity:sources", description="POST 1 source factice vers /sources:batchUpsert")
     int sanitySources() {
-      try { return sanitySourcesCmd.call(); } catch (Exception e) { System.err.println(e.getMessage()); return 1; }
+      try { return sanitySourcesCmd.call(); }
+      catch (Exception e) { System.err.println(e.getMessage()); return 1; }
     }
 
     @Override public Integer call() { CommandLine.usage(this, System.out); return 0; }

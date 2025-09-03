@@ -27,9 +27,9 @@ public class YouTubeCollectorService {
     private final WebApiSinkService sink;
     private final WebApiClient api;
 
-    public int collect(boolean initial) {
+    public int collect() {
         var chs = props.getChannelIds();
-        log.debug("YT collect initial={}, channels={}", initial, chs);
+        log.debug("YT collect, channels={}",  chs);
         if (props.getApiKey() == null || props.getApiKey().isBlank()) {
             log.warn("YouTube API key missing — skipping");
             return 0;
@@ -42,7 +42,7 @@ public class YouTubeCollectorService {
         int totalMetrics = 0;
         int totalSources = 0;
         for (String channel : chs) {
-            var res = collectChannel(channel.trim(), initial);
+            var res = collectChannel(channel.trim());
             totalMetrics += res.metrics;
             totalSources += res.sources;
         }
@@ -53,15 +53,15 @@ public class YouTubeCollectorService {
     private record Collected(int sources, int metrics) {
     }
 
-    private Collected collectChannel(String channelId, boolean initial) {
+    private Collected collectChannel(String channelId) {
         int pushedSources = 0;
         int pushedMetrics = 0;
         try {
             Path statePath = Path.of(props.getStateDir(), "youtube-" + channelId + ".json");
             JsonStateStore state = new JsonStateStore(statePath);
-            LocalDateTime cutoff = initial ? LocalDateTime.of(1970, 1, 1, 0, 0) :
+            LocalDateTime cutoff =
                     LocalDate.now(ZoneOffset.UTC).minusDays(props.getWindowDaysRolling()).atStartOfDay();
-            log.debug("YT channel={}, initial={}, cutoff={}", channelId, initial, cutoff);
+            log.debug("YT channel={}, cutoff={}", channelId,  cutoff);
 
             String uploads = fetchUploadsPlaylistId(channelId);
             log.debug("YT uploads playlistId={}", uploads);
@@ -78,7 +78,7 @@ public class YouTubeCollectorService {
             while (true) {
                 String etagKey = "pl:" + uploads + ":" + (pageToken == null ? "" : pageToken);
                 // IMPORTANT : pas d'ETag en mode init (sinon 304 et 0 résultat)
-                String etag = initial ? null : state.getEtag(etagKey);
+                String etag = state.getEtag(etagKey);
                 log.debug("YT page request uploads={}, token={}, etag={}", uploads, pageToken, etag);
 
                 JsonNode page = yt.playlistItems(props.getApiKey(), uploads, props.getPageSize(), pageToken, etag).block();
@@ -89,7 +89,7 @@ public class YouTubeCollectorService {
                 pages++;
 
                 String newEtag = page.path("etag").asText(null);
-                if (!initial && newEtag != null) {
+                if (newEtag != null) {
                     state.setEtag(etagKey, newEtag);
                 }
 
@@ -100,7 +100,7 @@ public class YouTubeCollectorService {
                     String published = item.path("snippet").path("publishedAt").asText(null);
                     LocalDateTime pAt = parseInstant(published);
 
-                    if (!initial && pAt != null && pAt.isBefore(cutoff)) {
+                    if (pAt != null && pAt.isBefore(cutoff)) {
                         stopByCutoff = true;
                         break; // stop lire items de cette page, et on sortra du while après
                     }
@@ -125,7 +125,7 @@ public class YouTubeCollectorService {
                 return new Collected(0, 0);
             }
 
-            var res = enrichAndPush(state, videoIds, initial);
+            var res = enrichAndPush(state, videoIds);
             state.save();
             log.info("YouTube channel {}: pushedSources={}, pushedMetrics={}", channelId, res.sources, res.metrics);
             return res;
@@ -135,7 +135,7 @@ public class YouTubeCollectorService {
         }
     }
 
-    private Collected enrichAndPush(JsonStateStore state, List<String> videoIds, boolean initial) {
+    private Collected enrichAndPush(JsonStateStore state, List<String> videoIds) {
         int sourcesCount = 0;
         int metricsCount = 0;
         final int CHUNK = 50;

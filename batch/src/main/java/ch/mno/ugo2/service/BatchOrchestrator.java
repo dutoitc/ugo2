@@ -17,23 +17,27 @@ public class BatchOrchestrator {
     private final DiscoveryService discoveryService;
     private final WebApiSinkService webApiSinkService;
 
-    public void run(boolean initial) {
-        final int days = initial ? cfg.getBatch().getInitialDays() : cfg.getBatch().getRollingDays();
+    /**
+     * Pipeline unique:
+     *  1) Discover (YouTube + Facebook): upsert des sources + métriques (baseline + courant)
+     *  2) Réconciliation côté API: crée/lie video_id sur la fenêtre glissante
+     */
+    public void run() {
+        final int days = cfg.getBatch().getRollingDays();
         final int hoursWindow = cfg.getBatch().getHoursWindow();
 
         var to   = LocalDateTime.now();
         var from = to.minusDays(days);
 
-        log.info(() -> String.format("[batch] start initial=%s window=%s..%s days=%d",
-                initial, from, to, days));
+        log.info(() -> String.format("[batch] start window=%s .. %s (days=%d)", from, to, days));
 
-        int created = discoveryService.discover(initial);
-        log.info(() -> String.format("[batch] ingest done createdSources=%d — launching API reconciliation…", created));
+        int pushedSnapshots = discoveryService.discover();
+        log.info(() -> String.format("[batch] discovery done, pushedSnapshots=%d — launching API reconciliation…", pushedSnapshots));
 
-        // Réconciliation côté API (DB en ligne)
+        // Réconciliation côté API (DB en ligne) — crée/lie video_id
         webApiSinkService.runReconcile(
                 from.atZone(ZoneOffset.UTC).toInstant(),
-                to.atZone(ZoneOffset.UTC).toInstant(),
+                to  .atZone(ZoneOffset.UTC).toInstant(),
                 hoursWindow,
                 false // dryRun=false => applique les liens video_id
         );
