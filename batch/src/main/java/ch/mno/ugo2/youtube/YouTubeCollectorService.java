@@ -14,10 +14,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.*;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 @Slf4j
@@ -52,7 +50,8 @@ public class YouTubeCollectorService {
         return totalMetrics;
     }
 
-    private record Collected(int sources, int metrics) {}
+    private record Collected(int sources, int metrics) {
+    }
 
     private Collected collectChannel(String channelId, boolean initial) {
         int pushedSources = 0;
@@ -60,7 +59,7 @@ public class YouTubeCollectorService {
         try {
             Path statePath = Path.of(props.getStateDir(), "youtube-" + channelId + ".json");
             JsonStateStore state = new JsonStateStore(statePath);
-            LocalDateTime cutoff = initial ? LocalDateTime.of(1970,1,1,0,0) :
+            LocalDateTime cutoff = initial ? LocalDateTime.of(1970, 1, 1, 0, 0) :
                     LocalDate.now(ZoneOffset.UTC).minusDays(props.getWindowDaysRolling()).atStartOfDay();
             log.debug("YT channel={}, initial={}, cutoff={}", channelId, initial, cutoff);
 
@@ -68,7 +67,7 @@ public class YouTubeCollectorService {
             log.debug("YT uploads playlistId={}", uploads);
             if (uploads == null) {
                 log.warn("No uploads playlist for {}", channelId);
-                return new Collected(0,0);
+                return new Collected(0, 0);
             }
 
             List<String> videoIds = new ArrayList<>();
@@ -77,7 +76,7 @@ public class YouTubeCollectorService {
             boolean stopByCutoff = false;
 
             while (true) {
-                String etagKey = "pl:" + uploads + ":" + (pageToken==null?"":pageToken);
+                String etagKey = "pl:" + uploads + ":" + (pageToken == null ? "" : pageToken);
                 // IMPORTANT : pas d'ETag en mode init (sinon 304 et 0 résultat)
                 String etag = initial ? null : state.getEtag(etagKey);
                 log.debug("YT page request uploads={}, token={}, etag={}", uploads, pageToken, etag);
@@ -106,18 +105,25 @@ public class YouTubeCollectorService {
                         break; // stop lire items de cette page, et on sortra du while après
                     }
                     if (vid != null) videoIds.add(vid);
-                    if (props.getMaxVideosPerRun() > 0 && videoIds.size() >= props.getMaxVideosPerRun()) { stopByCutoff = true; break; }
+                    if (props.getMaxVideosPerRun() > 0 && videoIds.size() >= props.getMaxVideosPerRun()) {
+                        stopByCutoff = true;
+                        break;
+                    }
                 }
                 int added = videoIds.size() - before;
                 log.debug("YT page {}: items+={} (total={})", pages, added, videoIds.size());
 
-                if (stopByCutoff || (props.getMaxVideosPerRun() > 0 && videoIds.size() >= props.getMaxVideosPerRun())) break;
+                if (stopByCutoff || (props.getMaxVideosPerRun() > 0 && videoIds.size() >= props.getMaxVideosPerRun()))
+                    break;
                 pageToken = page.path("nextPageToken").asText(null);
                 if (pageToken == null) break;
             }
 
             log.info("YouTube scanning: pages={}, collectedIds={}", pages, videoIds.size());
-            if (videoIds.isEmpty()) { state.save(); return new Collected(0,0); }
+            if (videoIds.isEmpty()) {
+                state.save();
+                return new Collected(0, 0);
+            }
 
             var res = enrichAndPush(state, videoIds, initial);
             state.save();
@@ -125,7 +131,7 @@ public class YouTubeCollectorService {
             return res;
         } catch (Exception e) {
             log.warn("collectChannel failed for {}: {}", channelId, e.toString());
-            return new Collected(0,0);
+            return new Collected(0, 0);
         }
     }
 
@@ -133,8 +139,8 @@ public class YouTubeCollectorService {
         int sourcesCount = 0;
         int metricsCount = 0;
         final int CHUNK = 50;
-        for (int i=0;i<videoIds.size();i+=CHUNK) {
-            List<String> slice = videoIds.subList(i, Math.min(i+CHUNK, videoIds.size()));
+        for (int i = 0; i < videoIds.size(); i += CHUNK) {
+            List<String> slice = videoIds.subList(i, Math.min(i + CHUNK, videoIds.size()));
             JsonNode v = yt.videosList(props.getApiKey(), slice).block();
             if (v == null) continue;
 
@@ -185,8 +191,8 @@ public class YouTubeCollectorService {
                         metrics.add(MetricsUpsertItem.builder()
                                 .platform("YOUTUBE")
                                 .platform_source_id(id)
-                                .snapshot_at(publishedAt.toString())
-                                .views_3s(null)
+                                .captured_at(publishedAt.toString())
+                                .views_3s(0)
                                 .views_platform_raw(0)
                                 .comments(0)
                                 .shares(null)
@@ -205,8 +211,8 @@ public class YouTubeCollectorService {
                     metrics.add(MetricsUpsertItem.builder()
                             .platform("YOUTUBE")
                             .platform_source_id(id)
-                            .snapshot_at(LocalDateTime.now(ZoneOffset.UTC).toString())
-                            .views_3s(null)
+                            .captured_at(nowUtcIso())
+                            .views_3s(viewsRaw)
                             .views_platform_raw(viewsRaw)
                             .comments(comments)
                             .shares(null)
@@ -239,9 +245,9 @@ public class YouTubeCollectorService {
 
     private boolean shouldSend(JsonStateStore state, String videoId, Integer viewsRaw) {
         var vs = state.getVideoState(videoId);
-        Integer last = vs.get("lastSentViews")==null? null: ((Number)vs.get("lastSentViews")).intValue();
+        Integer last = vs.get("lastSentViews") == null ? null : ((Number) vs.get("lastSentViews")).intValue();
         String lastAtS = (String) vs.get("lastSentAt");
-        LocalDate lastAt = lastAtS==null? null: LocalDate.parse(lastAtS);
+        LocalDate lastAt = lastAtS == null ? null : LocalDate.parse(lastAtS);
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
 
         if (last == null) return true; // première fois
@@ -265,7 +271,26 @@ public class YouTubeCollectorService {
 
     private static LocalDateTime parseInstant(String iso) {
         if (iso == null) return null;
-        try { return LocalDateTime.ofInstant(Instant.parse(iso), ZoneOffset.UTC); }
-        catch (Exception e) { return null; }
+        try {
+            return LocalDateTime.ofInstant(Instant.parse(iso), ZoneOffset.UTC);
+        } catch (Exception e) {
+            return null;
+        }
     }
+
+
+    /**
+     * ISO-8601 UTC (Z) pour "maintenant", sans millisecondes.
+     */
+    private static String nowUtcIso() {
+        return OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS).toString();
+    }
+
+    /**
+     * Convertit un LocalDateTime (UTC) en ISO-8601 UTC (Z) sans millisecondes.
+     */
+    private static String toUtcIso(LocalDateTime ldtUtc) {
+        return OffsetDateTime.of(ldtUtc, ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS).toString();
+    }
+
 }

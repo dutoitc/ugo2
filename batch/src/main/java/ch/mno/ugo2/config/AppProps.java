@@ -1,5 +1,6 @@
 package ch.mno.ugo2.config;
 
+import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -10,7 +11,17 @@ public class AppProps {
   // ==== Batch (modes auto) ====
   private Batch batch = new Batch();
   public Batch getBatch() { return batch; }
-  public static class Batch { public boolean initial = false; public int rollingDays = 7; }
+
+  @Data
+  public static class Batch {
+    /** Fenêtre rolling (jours) pour les runs réguliers */
+    public int rollingDays = 7;
+    /** Fenêtre initiale (jours) pour batch:init */
+    public int initialDays = 365 * 7; // 7 ans par défaut
+    public int hoursWindow = 72;
+  }
+
+
 
   // ==== Plateformes (activations + IDs) ====
   private Platforms platforms = new Platforms();

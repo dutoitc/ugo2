@@ -9,7 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class MetricsUpsertItem {
     private String platform;
     private String platform_source_id;
-    private String snapshot_at;        // ISO-8601 UTC
+    private String captured_at;        // ISO-8601 UTC
     private Integer views_3s;
     private Integer views_platform_raw;
     private Integer comments;

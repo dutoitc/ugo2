@@ -182,4 +182,13 @@ public class WebApiClient {
         return chain;
     }
 
+    public Mono<Void> runReconcile(String fromIso, String toIso, int hoursWindow, boolean dryRun) {
+        Map<String,Object> body = Map.of(
+                "from", fromIso, "to", toIso,
+                "hoursWindow", hoursWindow, "dryRun", dryRun
+        );
+        return send("/api/v1/reconcile:run", body);
+    }
+
+
 }
