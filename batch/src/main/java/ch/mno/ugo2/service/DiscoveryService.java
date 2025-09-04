@@ -24,7 +24,7 @@ public class DiscoveryService {
 
     int fbPushed = 0;
     try {
-      fbPushed = fb.collect();
+      fbPushed = fb.collect(false);
     } catch (FacebookApiException e) {
       log.error("[discovery] Facebook error: {}", e.getMessage());
     } catch (Exception e) {

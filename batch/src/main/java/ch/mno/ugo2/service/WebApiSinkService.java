@@ -51,6 +51,21 @@ public class WebApiSinkService {
         client.runReconcile(null, null, hoursWindow, dryRun).block();
     }
 
+    /** Upsert de sources (fait le block() en interne). */
+    public void batchUpsertSources(List<SourceUpsertItem> items) {
+        if (items == null || items.isEmpty()) return;
+        client.batchUpsertSources(items).block();
+    }
+
+    /** Upsert de métriques (avec dédup si tu l’as déjà en privé). */
+    public void batchUpsertMetrics(List<MetricsUpsertItem> items) {
+        if (items == null || items.isEmpty()) return;
+        // si tu as une méthode dedup(List<MetricsUpsertItem>) privée, garde-la :
+        // var payload = dedup(items);
+        var payload = items;
+        client.batchUpsertMetrics(payload).block();
+    }
+
     List<MetricsUpsertItem> dedup(List<MetricsUpsertItem> in) {
         Map<String, MetricsUpsertItem> uniq = new LinkedHashMap<>();
         for (var m : in) {
