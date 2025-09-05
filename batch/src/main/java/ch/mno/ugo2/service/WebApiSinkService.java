@@ -7,31 +7,51 @@ import ch.mno.ugo2.dto.SourceUpsertItem;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class WebApiSinkService {
+
     private final WebApiClient client;
 
-    public void pushSources(List<SourceUpsertItem> items) {
-        if (items == null || items.isEmpty()) return;
-        client.batchUpsertSources(items).block();
-        log.info("Pushed {} sources", items.size());
+    /* ---------- SOURCES ---------- */
+
+    public void batchUpsertSources(List<SourceUpsertItem> sources) {
+        var payload = Map.of("sources", sources);
+        log.info("API POST /api/v1/sources:batchUpsert (items={}, bytes={})", sources.size(), approxBytes(payload));
+        String body = client.postJsonForBody("/api/v1/sources:batchUpsert", payload).block();
+        log.info("Ingest sources result: {}", body);
     }
 
-    public void pushMetrics(List<MetricsUpsertItem> items) {
-        if (items == null || items.isEmpty()) return;
-        List<MetricsUpsertItem> payload = dedup(items);
-        client.batchUpsertMetrics(payload).block();
-        log.info("Pushed {} metric snapshots", items.size());
+    public void pushSources(List<SourceUpsertItem> items) { batchUpsertSources(items); }
+
+    /* ---------- METRICS ---------- */
+
+    public void batchUpsertMetrics(List<MetricsUpsertItem> snapshots) {
+        var payload = Map.of("snapshots", snapshots);
+        log.info("API POST /api/v1/metrics:batchUpsert (items={}, bytes={})", snapshots.size(), approxBytes(payload));
+        String body = client.postJsonForBody("/api/v1/metrics:batchUpsert", payload).block();
+        log.info("Ingest metrics result: {}", body);
     }
+
+
+    public void pushMetrics(List<MetricsUpsertItem> items) { batchUpsertMetrics(items); }
+
+    private long approxBytes(Object obj) {
+        try {
+            String s = obj.toString();
+            return s.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        } catch (Exception e) { return -1; }
+    }
+
+    /* ---------- OVERRIDES ---------- */
 
     public void applyOverrides(List<OverrideItem> items) {
         if (items == null || items.isEmpty()) return;
@@ -39,42 +59,33 @@ public class WebApiSinkService {
         log.info("Applied {} overrides", items.size());
     }
 
-    /** Compat: exécuter une réconciliation bornée si on nous passe des bornes. */
+    /* ---------- RECONCILE ---------- */
+
     public void runReconcile(Instant from, Instant to, int hoursWindow, boolean dryRun) {
         client.runReconcile(from == null ? null : from.toString(),
-                to   == null ? null : to.toString(),
+                to == null ? null : to.toString(),
                 hoursWindow, dryRun).block();
     }
 
-    /** Nouvelle méthode: réconciliation sur l'ensemble des sources (pas de bornes temporelles). */
     public void runReconcileAll(int hoursWindow, boolean dryRun) {
         client.runReconcile(null, null, hoursWindow, dryRun).block();
     }
 
-    /** Upsert de sources (fait le block() en interne). */
-    public void batchUpsertSources(List<SourceUpsertItem> items) {
-        if (items == null || items.isEmpty()) return;
-        client.batchUpsertSources(items).block();
-    }
-
-    /** Upsert de métriques (avec dédup si tu l’as déjà en privé). */
-    public void batchUpsertMetrics(List<MetricsUpsertItem> items) {
-        if (items == null || items.isEmpty()) return;
-        // si tu as une méthode dedup(List<MetricsUpsertItem>) privée, garde-la :
-        // var payload = dedup(items);
-        var payload = items;
-        client.batchUpsertMetrics(payload).block();
-    }
+    /* ---------- Helpers ---------- */
 
     List<MetricsUpsertItem> dedup(List<MetricsUpsertItem> in) {
         Map<String, MetricsUpsertItem> uniq = new LinkedHashMap<>();
         for (var m : in) {
             if (m == null) continue;
-            String k = (m.getPlatform()==null?"":m.getPlatform()) + "|" +
-                    (m.getPlatform_source_id()==null?"":m.getPlatform_source_id()) + "|" +
-                    (m.getCaptured_at()==null?"":m.getCaptured_at());
-            uniq.put(k, m); // garde le dernier si collision
+            String idPart = m.getSource_video_id() != null
+                    ? String.valueOf(m.getSource_video_id())
+                    : (m.getPlatform() + ":" + String.valueOf(m.getPlatform_video_id()));
+            String tPart = m.getSnapshot_at() != null ? m.getSnapshot_at().toString() : "";
+            String k = (m.getPlatform()==null?"":m.getPlatform()) + "|" + idPart + "|" + tPart;
+            uniq.put(k, m);
         }
         return new ArrayList<>(uniq.values());
     }
+
+
 }

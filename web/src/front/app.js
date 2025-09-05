@@ -84,7 +84,22 @@
         return frag;
       }
 
-      function fmtDate(iso){ try{ return new Date(iso).toLocaleString('fr-CH',{ dateStyle:'medium', timeStyle:'short'});}catch{ return iso; } }
+        function fmtDate(v){
+          if (!v) return '—';
+          // accepte ISO ou DATETIME MySQL "YYYY-MM-DD HH:MM:SS(.ms)"
+          let d;
+          if (typeof v === 'string' && /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(\.\d+)?$/.test(v)) {
+            d = new Date(v.replace(' ', 'T') + 'Z'); // traite comme UTC
+          } else {
+            d = new Date(v);
+          }
+          if (isNaN(d)) return '—';
+          return d.toLocaleString('fr-CH', {
+            timeZone: 'Europe/Zurich',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit'
+          });
+        }
 
       // --- Screens --------------------------------------------------------------
       async function renderList(){
@@ -107,16 +122,20 @@
           const grid = el('div','grid videos');
           data.items.forEach(v=>{
             const card = el('div','card');
-            const h = el('h3',null,v.canonical_title || '(sans titre)');
-            const when = el('div','small', `Publié: ${fmtDate(v.published_at_local)}`);
+
+            const h = el('h3', null, (v.title && v.title.trim()) ? v.title : '(sans titre)');
+
+            const when = el('div','small', `Publié: ${fmtDate(v.published_at)}`);
+
 
             // platforms present in sources
-            const plats = [...new Set((v.sources||[]).map(s=>s.platform))];
+            const plats = Object.keys(v.by_platform || {}); // YOUTUBE / FACEBOOK / …
+
             const badges = platformBadges(plats);
 
             const kpi = el('div','kpi');
-            const t1 = el('div','tile', `${(v.sources||[]).length} source(s)`);
-            const t2 = el('div','tile', `${v.total_views_3s||0} vues (3s)`);
+            const t1 = el('div','tile', `${plats.length} plateforme(s)`);
+            const t2 = el('div','tile', `${0} vues (3s)`);
             kpi.append(t1,t2);
 
             const open = el('button','button','Ouvrir');
@@ -183,7 +202,7 @@
               <td>${escapeHtml(s.title||'')}</td>
               <td>${fmtDate(s.published_at_local||s.published_at||'')}</td>
               <td>${s.is_teaser? 'oui':'non'}</td>
-              <td>${s.permalink? `<a class="a" href="${s.permalink}" target="_blank" rel="noopener">ouvrir</a>`:''}</td>
+              <td>${s.permalink? `<a class="a" href="${s.permalink || s.url}" target="_blank" rel="noopener">ouvrir</a>`:''}</td>
               <td>${s.latest_views_3s??''}</td>`;
             tb.append(tr);
           });

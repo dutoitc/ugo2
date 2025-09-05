@@ -32,6 +32,7 @@ final class Router
 
             // Others
             ['POST', '/api/v1/reconcile:run',         ['Web\\Controllers\\ReconcileController', 'run']],
+            ['POST', '/api/v1/overrides:apply',       ['Web\\Controllers\\OverridesController', 'apply']],
 
             // Ingestion METRICS
             ['POST', '/api/v1/metrics:batchUpsert',   ['Web\\Controllers\\MetricsIngestController', 'batchUpsert']],

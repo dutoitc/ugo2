@@ -2,132 +2,164 @@ package ch.mno.ugo2.facebook;
 
 import ch.mno.ugo2.config.FacebookProps;
 import ch.mno.ugo2.dto.MetricsUpsertItem;
-import ch.mno.ugo2.dto.SourceUpsertItem;
-import ch.mno.ugo2.facebook.dto.FbInsights;
-import ch.mno.ugo2.facebook.dto.FbPagePost;
-import ch.mno.ugo2.facebook.dto.FbVideo;
-import ch.mno.ugo2.facebook.dto.GraphPage;
 import ch.mno.ugo2.service.WebApiSinkService;
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
- * Pipeline lisible :
- *  discover posts -> extract videoIds -> fetch video details -> upsert sources
- *  -> fetch insights -> upsert metrics (baseline @published + snapshot @now)
+ * Découvre les posts publiés pour chaque page configurée, extrait les IDs vidéo/reel,
+ * récupère métriques (video + insights) et pousse vers l'API.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class FacebookCollectorService {
 
-  private final ch.mno.ugo2.facebook.FacebookClient fb;
-  private final FacebookProps cfg;
-  private final WebApiSinkService sink;
-  private final FacebookMapper mapper;
+    private final ch.mno.ugo2.facebook.FacebookClient fb;
+    private final FacebookProps cfg;
+    private final WebApiSinkService sink;
 
-  /**
-   * Collecte glissante (initial ou rolling).
-   * @return nombre de vidéos traitées
-   */
-  public int collect(boolean initial) {
-    final int window = initial ? cfg.getWindowDaysInitial() : cfg.getWindowDaysRolling();
-    final OffsetDateTime from = OffsetDateTime.now(ZoneOffset.UTC).minusDays(window);
-    final OffsetDateTime now  = OffsetDateTime.now(ZoneOffset.UTC);
 
-    int totalVideos = 0;
-    for (String pageId : cfg.getPageIds()) {
-      totalVideos += collectPage(pageId, from, now);
+    /**
+     * @return nombre de snapshots poussés
+     */
+    public int collect() {
+        List<String> pageIds = cfg.getPageIds(); // ex: app.yaml → facebook.pageIds: [123..., 456...]
+        if (pageIds == null || pageIds.isEmpty()) {
+            log.warn("[FB] aucune page configurée (facebook.pageIds vide)");
+            return 0;
+        }
+
+        Set<String> allVideoIds = new LinkedHashSet<>();
+        for (String pageId : pageIds) {
+            try {
+                allVideoIds.addAll(discoverVideoIdsForPage(pageId));
+            } catch (Exception e) {
+                log.warn("[FB] page {}: {}", pageId, e.toString());
+            }
+        }
+
+        if (allVideoIds.isEmpty()) return 0;
+        return collectAndPushByIds(new ArrayList<>(allVideoIds)).blockOptional().orElse(0);
     }
-    log.info("Facebook collect → pages={}, videosProcessed={}", cfg.getPageIds().size(), totalVideos);
-    return totalVideos;
-  }
 
-  private int collectPage(String pageId, OffsetDateTime from, OffsetDateTime now) {
-    int processedVideos = 0;
-    String after = null;
+    /** Collecte/pousse un lot d’IDs connus (utilitaire, utilisé par collect()). */
+    public Mono<Integer> collectAndPushByIds(List<String> ids) {
+        if (ids == null || ids.isEmpty()) return Mono.just(0);
 
-    do {
-      // 1) Page de posts publiés (fabrique statique → lisible)
-      var qPosts = FacebookQuery.buildQueryPublishedPosts(cfg, pageId, after);
-
-      GraphPage<FbPagePost> page = fb.get(qPosts,
-                      new ParameterizedTypeReference<GraphPage<FbPagePost>>() {})
-              .block();
-
-      if (page == null || page.data() == null || page.data().isEmpty()) break;
-
-      // 2) Extraire les videoIds depuis les attachments
-      List<String> videoIds = extractVideoIds(page.data());
-
-      if (!videoIds.isEmpty()) {
-        // 3) Charger les détails vidéos
-        List<FbVideo> videos = fetchVideos(videoIds);
-
-        // 4) Upsert sources (FIX: appeler méthode exposée par le sink)
-        List<SourceUpsertItem> sources = videos.stream()
-                .map(v -> mapper.toSource(v, "VIDEO")) // TODO: affiner pour REEL si besoin
-                .toList();
-        if (!sources.isEmpty()) {
-          sink.batchUpsertSources(sources); // ← méthode ajoutée dans WebApiSinkService ci-dessous
-        }
-
-        // 5) Insights + metrics (baseline @published + snapshot @now)
-        List<MetricsUpsertItem> metrics = new ArrayList<>(videos.size() * 2);
-        for (FbVideo v : videos) {
-          var qIns = FacebookQuery.buildQueryInsights(cfg, v.id());
-          FbInsights ins = fb.get(qIns, FbInsights.class).block();
-
-          // snapshot courant
-          metrics.add(mapper.toSnapshot(v, ins, now));
-          // baseline @ published_at si connu
-          if (v.createdTime() != null && !v.createdTime().isAfter(now)) {
-            metrics.add(mapper.toSnapshot(v, ins, v.createdTime()));
-          }
-        }
-        if (!metrics.isEmpty()) {
-          sink.batchUpsertMetrics(metrics); // idem: méthode exposée par le sink
-        }
-
-        processedVideos += videos.size();
-      }
-
-      after = (page.paging() != null && page.paging().cursors() != null)
-              ? page.paging().cursors().after()
-              : null;
-
-    } while (after != null);
-
-    log.info("Facebook collect page={} → processedVideos={}", pageId, processedVideos);
-    return processedVideos;
-  }
-
-  private List<String> extractVideoIds(List<FbPagePost> posts) {
-    return posts.stream()
-            .map(FbPagePost::attachments)
-            .filter(Objects::nonNull)
-            .flatMap(a -> a.data().stream())
-            .filter(att -> "video".equalsIgnoreCase(att.mediaType()))
-            .map(att -> att.target() != null ? att.target().id() : null)
-            .filter(Objects::nonNull)
-            .distinct()
-            .collect(Collectors.toList());
-  }
-
-  private List<FbVideo> fetchVideos(List<String> videoIds) {
-    List<FbVideo> out = new ArrayList<>(videoIds.size());
-    for (String id : videoIds) {
-      var qVideo = FacebookQuery.buildQueryVideo(cfg, id);
-      FbVideo v = fb.get(qVideo, FbVideo.class).block();
-      if (v != null) out.add(v);
+        return Flux.fromIterable(ids)
+                .flatMap(this::fetchOne)           // Mono<MetricsUpsertItem>
+                .collectList()
+                .doOnNext(list -> {
+                    log.info("[FB] mapped {} snapshots", list.size());
+                    sink.batchUpsertMetrics(list);
+                })
+                .map(List::size);
     }
-    return out;
-  }
+
+    /* ------------------- internals ------------------- */
+
+    private List<String> discoverVideoIdsForPage(String pageId) {
+        List<String> out = new ArrayList<>();
+        String after = null;
+        int pages = 0;
+
+        do {
+            var q = FacebookQuery.buildQueryPublishedPosts(cfg, pageId, after);
+            JsonNode resp = fb.get(q, JsonNode.class).block();
+            if (resp == null) break;
+
+            JsonNode data = resp.get("data");
+            if (data != null && data.isArray()) {
+                for (JsonNode post : data) {
+                    // attachments{media_type,target{id}}
+                    JsonNode attachments = post.path("attachments").path("data");
+                    if (attachments.isArray()) {
+                        for (JsonNode att : attachments) {
+                            String mediaType = att.path("media_type").asText("");
+                            String targetId  = att.path("target").path("id").asText(null);
+                            if (targetId == null || targetId.isBlank()) continue;
+
+                            // on garde les objets vidéo/reel uniquement
+                            if (mediaType.toLowerCase(Locale.ROOT).contains("video")) {
+                                out.add(targetId); // videoId (utilisable pour /{id} et /{id}/video_insights)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // pagination
+            String nextAfter = resp.path("paging").path("cursors").path("after").asText(null);
+            after = (nextAfter != null && !nextAfter.isBlank()) ? nextAfter : null;
+
+            pages++;
+        } while (after != null);
+
+        log.info("[FB] page {} -> {} videoIds (pages={}", pageId, out.size(), pages);
+        return out;
+    }
+
+    private Mono<MetricsUpsertItem> fetchOne(String id) {
+        // 1) Détails vidéo/reel (ajout product_type,is_reel pour détecter REEL vs VIDEO)
+        FacebookQuery videoQ = FacebookQuery.builder()
+                .version(cfg.getApiVersion())
+                .video(id)
+                .fields("id,permalink_url,created_time,length,is_reel")
+                .accessToken(cfg.getAccessToken())
+                .build();
+
+        // 2) Insights (superset)
+        FacebookQuery insightsQ = FacebookQuery.buildQueryInsights(cfg, id, null); // null = all metrics
+
+        Mono<JsonNode> videoMono    = fb.get(videoQ, JsonNode.class);
+        Mono<JsonNode> insightsMono = fb.get(insightsQ, JsonNode.class);
+
+        return Mono.zip(videoMono, insightsMono)
+                .map(t -> {
+                    JsonNode video = t.getT1();
+                    Map<String, Long> insights = toInsightMap(t.getT2());
+                    return FacebookMetricsMapper.fromVideoAndInsights(video, insights);
+                })
+                .onErrorResume(e -> {
+                    log.warn("[FB] {} -> {}", id, e.toString());
+                    return Mono.empty();
+                });
+    }
+
+    private Map<String, Long> toInsightMap(JsonNode insightsResp) {
+        Map<String, Long> out = new LinkedHashMap<>();
+        if (insightsResp == null) return out;
+
+        JsonNode data = insightsResp.get("data");
+        if (data == null || !data.isArray()) return out;
+
+        for (JsonNode metric : data) {
+            String name = metric.path("name").asText(null);
+            if (name == null) continue;
+
+            Long v = extractFirstValue(metric.path("values"));
+            if (v != null) out.put(name, v);
+        }
+        return out;
+    }
+
+    private Long extractFirstValue(JsonNode valuesNode) {
+        if (valuesNode == null || !valuesNode.isArray() || valuesNode.isEmpty()) return null;
+        JsonNode first = valuesNode.get(0);
+        JsonNode val = first.get("value");
+        if (val == null) return null;
+
+        if (val.isNumber()) return val.longValue();
+        if (val.isTextual()) {
+            try { return Long.parseLong(val.asText()); } catch (NumberFormatException ignored) {}
+        }
+        return null; // parfois FB renvoie un objet → on ignore
+    }
 }

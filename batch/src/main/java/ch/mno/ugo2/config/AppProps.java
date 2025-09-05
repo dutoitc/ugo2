@@ -6,8 +6,9 @@ import org.springframework.validation.annotation.Validated;
 
 @Validated
 @ConfigurationProperties(prefix = "app")
+@Deprecated
 public class AppProps {
-
+//
   // ==== Batch (modes auto) ====
   private Batch batch = new Batch();
   public Batch getBatch() { return batch; }
@@ -21,21 +22,6 @@ public class AppProps {
     public int hoursWindow = 72;
   }
 
-
-
-  // ==== Plateformes (activations + IDs) ====
-  private Platforms platforms = new Platforms();
-  public Platforms getPlatforms() { return platforms; }
-  public static class Platforms {
-    public Facebook fb = new Facebook();
-    public YouTube  yt = new YouTube();
-    public Instagram ig = new Instagram();
-    public WordPress wp = new WordPress();
-  }
-  public static class Facebook { public boolean enabled = true;  public String pageId = "";     public String accessToken = ""; }
-  public static class YouTube  { public boolean enabled = true;  public String channelId = "";  public String apiKey = ""; }
-  public static class Instagram{ public boolean enabled = false; public String userId = "";     public String accessToken = ""; }
-  public static class WordPress{ public boolean enabled = true;  public String baseUrl = ""; }
 
   // ==== Budgets (soft caps) ====
   private Budgets budgets = new Budgets();

@@ -1,285 +1,157 @@
 package ch.mno.ugo2.youtube;
 
-import ch.mno.ugo2.api.WebApiClient;
 import ch.mno.ugo2.config.YouTubeProps;
 import ch.mno.ugo2.dto.MetricsUpsertItem;
-import ch.mno.ugo2.dto.SourceUpsertItem;
 import ch.mno.ugo2.service.WebApiSinkService;
-import ch.mno.ugo2.util.IsoDurations;
-import ch.mno.ugo2.util.JsonStateStore;
-import ch.mno.ugo2.util.TeaserHeuristics;
+import ch.mno.ugo2.youtube.responses.ChannelsContentDetailsResponse;
+import ch.mno.ugo2.youtube.responses.PlaylistItemsResponse;
+import ch.mno.ugo2.youtube.responses.VideoListResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import ch.mno.ugo2.dto.SourceUpsertItem;
+import reactor.core.scheduler.Schedulers;
 
-import java.nio.file.Path;
-import java.time.*;
-import java.time.temporal.ChronoUnit;
+
 import java.util.*;
 
+/**
+ * Collecte l'historique des vidéos de chaînes configurées puis pousse les métriques vers l'API.
+ * - Découverte: channels.list -> relatedPlaylists.uploads -> playlistItems (pagination)
+ * - Poussée: /api/v1/metrics:batchUpsert
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class YouTubeCollectorService {
-    private final YouTubeProps props;
+
     private final YouTubeClient yt;
+    private final YouTubeProps cfg;
     private final WebApiSinkService sink;
-    private final WebApiClient api;
 
-    /** Charge l'historique complet pour tous les channels configurés. */
+    /**
+     * Collecte complète (toutes les chaînes en config) et retourne le nombre de snapshots poussés.
+     */
     public int collect() {
-        var chs = props.getChannelIds();
-        log.debug("YT collect, channels={}", chs);
-        if (props.getApiKey() == null || props.getApiKey().isBlank()) {
-            log.warn("YouTube API key missing — skipping");
-            return 0;
-        }
-        if (chs == null || chs.isEmpty()) {
-            log.warn("YouTube channelIds empty — nothing to do");
+        String apiKey = cfg.getApiKey();
+        List<String> channelIds = cfg.getChannelIds();
+
+        if (channelIds.isEmpty()) {
+            log.warn("[YT] aucune chaîne configurée (youtube.channelIds vide)");
             return 0;
         }
 
-        int totalMetrics = 0;
-        int totalSources = 0;
-        for (String channel : chs) {
-            var res = collectChannel(channel.trim());
-            totalMetrics += res.metrics;
-            totalSources += res.sources;
-        }
-        log.info("YouTube: totalSources={}, totalMetricsSent={}", totalSources, totalMetrics);
-        return totalMetrics;
-    }
-
-    private record Collected(int sources, int metrics) {}
-
-    /** Collecte tout l'historique d'un channel (playlist 'uploads'), sans cutoff. */
-    private Collected collectChannel(String channelId) {
-        int pushedSources = 0;
-        int pushedMetrics = 0;
-        try {
-            Path statePath = Path.of(props.getStateDir(), "youtube-" + channelId + ".json");
-            JsonStateStore state = new JsonStateStore(statePath);
-
-            log.debug("YT channel={}, full history (no cutoff)", channelId);
-
-            String uploads = fetchUploadsPlaylistId(channelId);
-            if (uploads == null || uploads.isBlank()) {
-                log.warn("YT channel={} has no uploads playlist — skipping", channelId);
-                return new Collected(0, 0);
-            }
-
-            List<String> videoIds = new ArrayList<>();
-            String pageToken = null;
-            int pages = 0;
-
-            while (true) {
-                pages++;
-                // ✅ signature: (apiKey, playlistId, Integer maxResults, String pageToken, String etag)
-                JsonNode page = yt.playlistItems(
-                        props.getApiKey(),
-                        uploads,
-                        props.getPageSize(),
-                        pageToken,
-                        null
-                ).block();
-
-                if (page == null) {
-                    log.warn("YT channel={} playlistItems returned null page (page={})", channelId, pages);
-                    break;
-                }
-
-                int before = videoIds.size();
-                for (JsonNode item : page.path("items")) {
-                    JsonNode cd = item.path("contentDetails");
-                    String vid = cd.path("videoId").asText(null);
-                    if (vid != null) videoIds.add(vid);
-                }
-                int added = videoIds.size() - before;
-                log.debug("YT channel={} page {}: items+={} (total={})", channelId, pages, added, videoIds.size());
-
-                pageToken = page.path("nextPageToken").asText(null);
-                if (pageToken == null) break;
-            }
-
-            if (videoIds.isEmpty()) {
-                log.info("YT channel={} no videos found in uploads", channelId);
-                return new Collected(0, 0);
-            }
-
-            var res = enrichAndPush(state, videoIds);
-            pushedSources += res.sources;
-            pushedMetrics += res.metrics;
-
-            try { state.save(); } catch (Exception e) {
-                log.warn("YT channel={} state save failed: {}", channelId, e.toString());
-            }
-
-            log.info("YT channel={} done: pushedSources={}, pushedMetrics={}", channelId, pushedSources, pushedMetrics);
-        } catch (Exception e) {
-            log.warn("YT channel={} failed", channelId, e);
-        }
-        return new Collected(pushedSources, pushedMetrics);
-    }
-
-    /** Enrichit et pousse par tranches (videos.list), logique existante. */
-    private Collected enrichAndPush(JsonStateStore state, List<String> videoIds) {
-        int sourcesCount = 0;
-        int metricsCount = 0;
-        final int CHUNK = 50;
-
-        for (int i = 0; i < videoIds.size(); i += CHUNK) {
-            List<String> slice = videoIds.subList(i, Math.min(i + CHUNK, videoIds.size()));
-            JsonNode v = yt.videosList(props.getApiKey(), slice).block();
-            if (v == null) continue;
-
-            // 1) IDs de ce slice
-            List<String> idsSlice = new ArrayList<>();
-            for (JsonNode it : v.path("items")) {
-                String id = it.path("id").asText(null);
-                if (id != null) idsSlice.add(id);
-            }
-            // 2) Quels manquent côté API distante ?
-            List<String> missing = api.filterMissingSources("YOUTUBE", idsSlice).block();
-            Set<String> missingSet = new HashSet<>(missing == null ? List.of() : missing);
-            log.debug("YT slice: ids={}, missing={}", idsSlice.size(), missingSet.size());
-
-            List<SourceUpsertItem> sources = new ArrayList<>();
-            List<MetricsUpsertItem> metrics = new ArrayList<>();
-
-            for (JsonNode it : v.path("items")) {
-                String id = it.path("id").asText();
-                JsonNode sn = it.path("snippet");
-                JsonNode st = it.path("statistics");
-                JsonNode cd = it.path("contentDetails");
-                String title = sn.path("title").asText(null);
-                String descr = sn.path("description").asText(null);
-                LocalDateTime publishedAt = parseInstant(sn.path("publishedAt").asText(null));
-                Integer durationSec = IsoDurations.toSeconds(cd.path("duration").asText(null));
-                boolean isShort = durationSec != null && durationSec <= 61;
-                boolean teaser = TeaserHeuristics.isTeaser(title, descr, durationSec);
-
-                // Nouvelle source ?
-                if (missingSet.contains(id)) {
-                    sources.add(SourceUpsertItem.builder()
-                            .platform("YOUTUBE")
-                            .platform_source_id(id)
-                            .title(title)
-                            .description(descr)
-                            .permalink_url("https://www.youtube.com/watch?v=" + id)
-                            .media_type(isShort ? "SHORT" : "VIDEO")
-                            .duration_seconds(durationSec)
-                            .published_at(publishedAt == null ? null : toUtcIso(publishedAt))
-                            .is_teaser(teaser ? 1 : 0)
-                            .video_id(null)
-                            .locked(0)
-                            .build());
-
-                    // Baseline à published_at (0 vues) si date connue
-                    if (publishedAt != null) {
-                        metrics.add(MetricsUpsertItem.builder()
-                                .platform("YOUTUBE")
-                                .platform_source_id(id)
-                                .captured_at(toUtcIso(publishedAt))
-                                .views_3s(0)
-                                .views_platform_raw(0)
-                                .comments(0)
-                                .shares(null)
-                                .reactions(0)
-                                .saves(null)
-                                .build());
-                    }
-                }
-
-                // Snapshot courant (avec plancher quotidien inconditionnel)
-                Integer viewsRaw = st.hasNonNull("viewCount")    ? st.get("viewCount").asInt()    : null;
-                Integer likes    = st.hasNonNull("likeCount")    ? st.get("likeCount").asInt()    : null;
-                Integer comments = st.hasNonNull("commentCount") ? st.get("commentCount").asInt() : null;
-
-                if (shouldSend(state, id, viewsRaw)) {
-                    metrics.add(MetricsUpsertItem.builder()
-                            .platform("YOUTUBE")
-                            .platform_source_id(id)
-                            .captured_at(nowUtcIso())
-                            .views_3s(viewsRaw)
-                            .views_platform_raw(viewsRaw)
-                            .comments(comments)
-                            .shares(null)
-                            .reactions(likes)
-                            .saves(null)
-                            .build());
-                    var vs = state.getVideoState(id);
-                    vs.put("lastSentViews", viewsRaw == null ? 0 : viewsRaw);
-                    vs.put("lastSentAt", LocalDate.now(ZoneOffset.UTC).toString());
-                }
-            }
-
-            if (!sources.isEmpty()) {
-                sink.pushSources(sources);
-                sourcesCount += sources.size();
-                log.info("Pushed YT sources chunk: {}", sources.size());
-            } else {
-                log.debug("No new YT sources to push in this chunk");
-            }
-            if (!metrics.isEmpty()) {
-                sink.pushMetrics(metrics);
-                metricsCount += metrics.size();
-                log.info("Pushed YT metrics chunk: {}", metrics.size());
-            } else {
-                log.debug("No YT metrics to push in this chunk");
+        Set<String> allVideoIds = new LinkedHashSet<>();
+        for (String channelId : channelIds) {
+            try {
+                String uploadsPlaylist = findUploadsPlaylist(apiKey, channelId);
+                if (uploadsPlaylist == null) continue;
+                allVideoIds.addAll(listPlaylistVideoIds(apiKey, uploadsPlaylist));
+            } catch (Exception e) {
+                log.warn("[YT] channel {}: {}", channelId, e.toString());
             }
         }
-        return new Collected(sourcesCount, metricsCount);
+
+        if (allVideoIds.isEmpty()) return 0;
+        return collectAndPushByIds(new ArrayList<>(allVideoIds)).blockOptional().orElse(0);
     }
 
     /**
-     * ⚠️ Nouveau comportement:
-     * - On envoie toujours au moins 1 snapshot par jour (si pas encore fait aujourd'hui),
-     *   même sans delta de vues.
-     * - Sinon, on envoie s'il y a un delta positif.
+     * Collecte/pousse un lot d’IDs connus (utilitaire, utilisé par collect()).
      */
-    private boolean shouldSend(JsonStateStore state, String videoId, Integer viewsRaw) {
-        var vs = state.getVideoState(videoId);
-        Integer last = vs.get("lastSentViews") == null ? null : ((Number) vs.get("lastSentViews")).intValue();
-        String lastAtS = (String) vs.get("lastSentAt");
-        LocalDate lastAt = lastAtS == null ? null : LocalDate.parse(lastAtS);
-        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+    public Mono<Integer> collectAndPushByIds(List<String> videoIds) {
+        log.info("collectAndPushByIds for {} videos", (videoIds == null ? "null" : videoIds.size()));
+        if (videoIds == null || videoIds.isEmpty()) return Mono.just(0);
 
-        // 1) pas encore envoyé: envoyer
-        if (last == null) return true;
-        // 2) plancher quotidien inconditionnel: 1/jour
-        if (lastAt == null || !lastAt.equals(today)) return true;
-        // 3) sinon, envoyer seulement si delta positif
-        if (viewsRaw == null) return false;
-        return viewsRaw > last;
+        String apiKey = cfg.getApiKey();
+        List<List<String>> chunks = chunk(videoIds, 50);
+
+        return Flux.fromIterable(chunks)
+                .flatMap(chunk -> yt.videosList(apiKey, chunk))
+                .flatMap(resp -> Flux.fromIterable(
+                        Optional.ofNullable(resp.getItems()).orElseGet(List::of)))
+                .collectList()
+                .flatMap(items -> {
+                    if (items.isEmpty()) return Mono.just(0);
+
+                    // 1) build SOURCES
+                    List<SourceUpsertItem> sources = new ArrayList<>(items.size());
+                    // 2) build METRICS
+                    List<MetricsUpsertItem> snapshots = new ArrayList<>(items.size());
+
+                    for (VideoListResponse.Item it : items) {
+                        var s  = it.getSnippet();
+                        var cd = it.getContentDetails();
+                        sources.add(SourceUpsertItem.builder()
+                                .platform("YOUTUBE")
+                                .platform_source_id(it.getId())                    // clé de source = id vidéo
+                                .title(s.getTitle())
+                                .description(s.getDescription())
+                                .permalink_url("https://www.youtube.com/watch?v=" + it.getId())
+                                .media_type(cd.getDuration().toSeconds() <= 60 ? "SHORT" : "VIDEO")
+                                .duration_seconds((int)cd.getDuration().toSeconds())
+                                .published_at(s.getPublishedAt().toString())                  // déjà ISO-8601
+                                .is_teaser(0)
+                                .video_id(null)
+                                .locked(0)
+                                .build());
+
+                        snapshots.add(YouTubeMetricsMapper.fromVideoResource(it));
+                    }
+
+                    log.info("[YT] mapped {} sources & {} snapshots", sources.size(), snapshots.size());
+
+                    // ⚠️ Appels BLOQUANTS déplacés sur boundedElastic
+                    return Mono.fromRunnable(() -> {
+                                sink.batchUpsertSources(sources);   // appelle bloquant interne (block())
+                                sink.batchUpsertMetrics(snapshots); // idem
+                            })
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .thenReturn(items.size());
+                });
     }
 
-    private String fetchUploadsPlaylistId(String channelId) {
-        JsonNode n = yt.channelsContentDetails(props.getApiKey(), channelId).block();
-        if (n == null) return null;
-        var items = n.path("items");
-        if (!items.isArray() || items.isEmpty()) return null;
-        var cd = items.get(0).path("contentDetails");
-        var rp = cd.path("relatedPlaylists");
-        return rp.path("uploads").asText(null);
+    /* ------------------- internals ------------------- */
+
+    private String findUploadsPlaylist(String apiKey, String channelId) {
+        log.info("findUploadsPlaylist, channelId={}", channelId);
+        ChannelsContentDetailsResponse response = yt.channelsContentDetails(apiKey, channelId).block();
+        if (response == null) return null;
+        var items = response.getItems();
+        if (items == null || items.isEmpty()) return null;
+        return items.getFirst()
+                .getContentDetails()
+                .getRelatedPlaylists()
+                .getUploads();
     }
 
-    private static LocalDateTime parseInstant(String iso) {
-        if (iso == null) return null;
-        try {
-            return LocalDateTime.ofInstant(Instant.parse(iso), ZoneOffset.UTC);
-        } catch (Exception e) {
-            return null;
-        }
+    private List<String> listPlaylistVideoIds(String apiKey, String playlistId) {
+        log.info("listPlaylistVideoIds, playlistId={}", playlistId);
+        List<String> out = new ArrayList<>();
+        String pageToken = null;
+        do {
+            var page = yt.playlistItems(apiKey, playlistId, 50, pageToken, null).block();
+            if (page == null) break;
+            var items = page.getItems();
+            if (items != null) {
+                for (PlaylistItemsResponse.Item it : items) {
+                    String vid = it.getContentDetails().getVideoId();
+                    if (vid != null && !vid.isBlank()) out.add(vid);
+                }
+            }
+            String next = page.getNextPageToken();
+            pageToken = (next != null && !next.isBlank()) ? next : null;
+        } while (pageToken != null);
+        log.info("[YT] playlist {} -> {} videoIds", playlistId, out.size());
+        return out;
     }
 
-    /** ISO-8601 UTC (Z) pour "maintenant", sans millisecondes. */
-    private static String nowUtcIso() {
-        return OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS).toString();
-    }
-
-    /** Convertit un LocalDateTime (UTC) en ISO-8601 UTC (Z) sans millisecondes. */
-    private static String toUtcIso(LocalDateTime ldtUtc) {
-        return OffsetDateTime.of(ldtUtc, ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS).toString();
+    private static <T> List<List<T>> chunk(List<T> in, int size) {
+        List<List<T>> out = new ArrayList<>();
+        for (int i = 0; i < in.size(); i += size) out.add(in.subList(i, Math.min(i + size, in.size())));
+        return out;
     }
 }

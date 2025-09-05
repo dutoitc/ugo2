@@ -1,231 +1,263 @@
 <?php
 declare(strict_types=1);
+
 namespace Web\Controllers;
 
+use Web\Auth;
 use Web\Db;
-use Web\Util;
+use Web\Lib\Http;
 
-final class VideosController {
+final class VideosController
+{
+    public function __construct(
+        private Db $db,
+        private ?Auth $auth = null // non utilisé pour l’instant
+    ) {}
 
-  public static function list(Db $db): array {
-    [$page, $size, $offset] = Util::paging();
-    $q           = Util::qp('q', '');
-    $from        = Util::qp('from', null);
-    $to          = Util::qp('to', null);
-    $platform    = Util::qp('platform', null);       // YOUTUBE|FACEBOOK|INSTAGRAM|WORDPRESS
-    $withMetrics = Util::qp('withMetrics', '0') === '1';
-
-    $where  = [];
-    $params = [];
-
-    if ($q !== '') {
-      $where[] = "(LOWER(v.canonical_title) LIKE ? OR LOWER(sv.title) LIKE ?)";
-      $params[] = "%".strtolower($q)."%";
-      $params[] = "%".strtolower($q)."%";
-    }
-    if ($from) { $where[] = "v.official_published_at >= ?"; $params[] = $from; }
-    if ($to)   { $where[] = "v.official_published_at <= ?"; $params[] = $to; }
-    if ($platform) { $where[] = "sv.platform = ?"; $params[] = $platform; }
-
-    $wsql = $where ? ("WHERE " . implode(" AND ", $where)) : "";
-
-    $pdo = $db->pdo();
-
-    // Total distinct videos
-    $stmtC = $pdo->prepare("
-      SELECT COUNT(DISTINCT v.id) AS c
-      FROM video v
-      LEFT JOIN source_video sv ON sv.video_id = v.id
-      $wsql
-    ");
-    $stmtC->execute($params);
-    $total = (int)($stmtC->fetch()['c'] ?? 0);
-
-    // Jointure metrics (facultative)
-    $metricsJoin = $withMetrics ? "
-      LEFT JOIN (
-        SELECT x.source_video_id, x.views_3s
-        FROM metric_snapshot x
-        INNER JOIN (
-          SELECT source_video_id, MAX(snapshot_at) AS last_snap
-          FROM metric_snapshot GROUP BY source_video_id
-        ) m ON m.source_video_id = x.source_video_id AND m.last_snap = x.snapshot_at
-      ) ms ON ms.source_video_id = sv.id
-    " : "";
-
-    $totalViewsExpr = $withMetrics
-      ? "COALESCE(SUM(CASE WHEN sv.platform <> 'WORDPRESS' THEN ms.views_3s ELSE 0 END),0)"
-      : "0";
-
-    // Page de résultats
-    $stmt = $pdo->prepare("
-      SELECT
-        v.id,
-        v.canonical_title,
-        v.canonical_description,
-        v.official_published_at,
-        $totalViewsExpr AS total_views_3s,
-        /* Assure un tableau vide [] si aucune source */
-        COALESCE(JSON_ARRAYAGG(JSON_OBJECT(
-          'platform', sv.platform,
-          'platform_source_id', sv.platform_source_id,
-          'title', sv.title,
-          'permalink', sv.permalink_url,
-          'is_teaser', sv.is_teaser,
-          'published_at', sv.published_at" . ($withMetrics ? ",
-          'latest_views_3s', COALESCE(ms.views_3s,0)" : "") . "
-        )), JSON_ARRAY()) AS sources
-      FROM video v
-      LEFT JOIN source_video sv ON sv.video_id = v.id
-      $metricsJoin
-      $wsql
-      GROUP BY v.id
-      ORDER BY v.official_published_at DESC, v.id DESC
-      LIMIT $size OFFSET $offset
-    ");
-    $stmt->execute($params);
-    $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-
-    // Normalisation de la sortie:
-    // - timezone locale
-    // - décoder JSON_ARRAYAGG en tableau PHP (selon PDO, ça peut revenir en string)
-    foreach ($rows as &$r) {
-      $r['published_at_local'] = self::toLocalIso($r['official_published_at'], 'Europe/Zurich');
-      if (is_string($r['sources'])) {
-        $dec = json_decode($r['sources'], true);
-        $r['sources'] = is_array($dec) ? $dec : [];
-      } elseif (!is_array($r['sources'])) {
-        $r['sources'] = [];
-      }
+    private function pdo(): \PDO {
+        if (method_exists($this->db, 'pdo')) return $this->db->pdo();
+        if (method_exists($this->db, 'getPdo')) return $this->db->getPdo();
+        throw new \RuntimeException('Db must expose PDO via pdo() or getPdo()');
     }
 
-    return ['page'=>$page,'pageSize'=>$size,'total'=>$total,'items'=>$rows];
-  }
+    /**
+     * GET /api/v1/videos
+     * Query params:
+     *  - page (>=1, défaut 1)
+     *  - size (1..200, défaut 20)
+     *  - q (recherche: titre/slug, LIKE %q%)
+     *  - platform (YOUTUBE|FACEBOOK|INSTAGRAM|TIKTOK) [optionnel]
+     *  - format (VIDEO|SHORT|REEL) [optionnel, filtre via existence de sources correspondantes]
+     *  - from, to (ISO date; filtre sur video_published_at)
+     *  - sort: views_desc (def), published_desc, published_asc, engagement_desc, watch_eq_desc, title_asc, title_desc
+     */
+    public function list(): void
+    {
+        $pdo = $this->pdo();
 
-  public static function get(Db $db): array {
-    // 1) Extraire l’ID depuis l’URL ou ?id=
-    $id = 0;
-    // a) query param de secours
-    $qid = Util::qp('id', null);
-    if ($qid !== null) { $id = (int)$qid; }
-    // b) sinon, piocher dans REQUEST_URI (ex: /api/v1/videos/123)
-    if ($id === 0 && isset($_SERVER['REQUEST_URI'])) {
-      if (preg_match('#/api/v1/videos/(\d+)#', $_SERVER['REQUEST_URI'], $m)) {
-        $id = (int)$m[1];
-      }
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $size = (int)($_GET['size'] ?? 20);
+        if ($size < 1)   $size = 20;
+        if ($size > 200) $size = 200;
+        $offset = ($page - 1) * $size;
+
+        $q        = isset($_GET['q']) ? trim((string)$_GET['q']) : null;
+        $platform = isset($_GET['platform']) ? strtoupper(trim((string)$_GET['platform'])) : null;
+        $format   = isset($_GET['format']) ? strtoupper(trim((string)$_GET['format'])) : null;
+
+        $from = isset($_GET['from']) ? trim((string)$_GET['from']) : null;
+        $to   = isset($_GET['to'])   ? trim((string)$_GET['to'])   : null;
+
+        $sort = isset($_GET['sort']) ? trim((string)$_GET['sort']) : 'views_desc';
+
+        // WHERE dynamiques
+        $where = [];
+        $args  = [];
+
+        if ($q !== null && $q !== '') {
+            $where[] = '(v.video_title LIKE ? OR v.slug LIKE ?)';
+            $args[] = '%' . $q . '%';
+            $args[] = '%' . $q . '%';
+        }
+
+        if ($from) { $where[] = 'v.video_published_at >= ?'; $args[] = $from; }
+        if ($to)   { $where[] = 'v.video_published_at <  ?'; $args[] = $to;   }
+
+        if ($platform) {
+            switch ($platform) {
+                case 'YOUTUBE':  $where[] = '(v.views_yt IS NOT NULL AND v.views_yt > 0)'; break;
+                case 'FACEBOOK': $where[] = '(v.views_fb IS NOT NULL AND v.views_fb > 0)'; break;
+                case 'INSTAGRAM':$where[] = '(v.views_ig IS NOT NULL AND v.views_ig > 0)'; break;
+                case 'TIKTOK':   $where[] = '(v.views_tt IS NOT NULL AND v.views_tt > 0)'; break;
+                default: /* ignore */;
+            }
+        }
+
+        if ($format && in_array($format, ['VIDEO','SHORT','REEL'], true)) {
+            $where[] = 'EXISTS (SELECT 1 FROM source_video sv WHERE sv.video_id = v.video_id AND sv.platform_format = ?)';
+            $args[] = $format;
+        }
+
+        $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
+
+        // Tri (NULLS LAST compatible MySQL/MariaDB)
+        $orderBy = match ($sort) {
+            'published_desc' => 'v.video_published_at DESC, v.video_id DESC',
+            'published_asc'  => 'v.video_published_at ASC,  v.video_id ASC',
+            'engagement_desc'=> '(v.engagement_rate_sum IS NULL) ASC, v.engagement_rate_sum DESC, v.views_native_sum DESC',
+            'watch_eq_desc'  => '(v.watch_equivalent_sum IS NULL) ASC, v.watch_equivalent_sum DESC, v.views_native_sum DESC',
+            'title_asc'      => 'v.video_title ASC,  v.video_id DESC',
+            'title_desc'     => 'v.video_title DESC, v.video_id DESC',
+            default          => 'v.views_native_sum DESC, v.video_published_at DESC'
+        };
+
+        // Count
+        $sqlCount = "SELECT COUNT(*) FROM v_video_latest_rollup v $whereSql";
+        $stCount = $pdo->prepare($sqlCount);
+        $stCount->execute($args);
+        $total = (int)$stCount->fetchColumn();
+
+        // Page (tout en positionnel: LIMIT ? OFFSET ?)
+        $sql = "
+            SELECT
+              v.video_id, v.slug, v.video_title, v.video_published_at, v.canonical_length_seconds,
+              v.views_native_sum, v.likes_sum, v.comments_sum, v.shares_sum,
+              v.total_watch_seconds_sum, v.avg_watch_ratio_est, v.watch_equivalent_sum, v.engagement_rate_sum,
+              v.views_yt, v.views_fb, v.views_ig, v.views_tt
+            FROM v_video_latest_rollup v
+            $whereSql
+            ORDER BY $orderBy
+            LIMIT ? OFFSET ?
+        ";
+        $st = $pdo->prepare($sql);
+        $execArgs = array_merge($args, [$size, $offset]);
+        $st->execute($execArgs);
+
+        $items = [];
+        while ($row = $st->fetch(\PDO::FETCH_ASSOC)) {
+            $items[] = [
+                'id'         => (int)$row['video_id'],
+                'slug'       => $row['slug'],
+                'title'      => $row['video_title'],
+                'published_at' => $row['video_published_at'],
+                'length_seconds' => $row['canonical_length_seconds'] !== null ? (int)$row['canonical_length_seconds'] : null,
+
+                'views_native_sum' => $row['views_native_sum'] !== null ? (int)$row['views_native_sum'] : null,
+                'likes_sum'        => $row['likes_sum']        !== null ? (int)$row['likes_sum']        : null,
+                'comments_sum'     => $row['comments_sum']     !== null ? (int)$row['comments_sum']     : null,
+                'shares_sum'       => $row['shares_sum']       !== null ? (int)$row['shares_sum']       : null,
+
+                'total_watch_seconds_sum' => $row['total_watch_seconds_sum'] !== null ? (int)$row['total_watch_seconds_sum'] : null,
+                'avg_watch_ratio_est'     => $row['avg_watch_ratio_est'] !== null ? (float)$row['avg_watch_ratio_est'] : null,
+                'watch_equivalent_sum'    => $row['watch_equivalent_sum'] !== null ? (float)$row['watch_equivalent_sum'] : null,
+                'engagement_rate_sum'     => $row['engagement_rate_sum'] !== null ? (float)$row['engagement_rate_sum'] : null,
+
+                'by_platform' => [
+                    'YOUTUBE'  => $row['views_yt'] !== null ? (int)$row['views_yt'] : 0,
+                    'FACEBOOK' => $row['views_fb'] !== null ? (int)$row['views_fb'] : 0,
+                    'INSTAGRAM'=> $row['views_ig'] !== null ? (int)$row['views_ig'] : 0,
+                    'TIKTOK'   => $row['views_tt'] !== null ? (int)$row['views_tt'] : 0,
+                ]
+            ];
+        }
+
+        \Web\Lib\Http::json([
+            'page'  => $page,
+            'size'  => $size,
+            'total' => $total,
+            'items' => $items
+        ], 200);
     }
-    if ($id <= 0) {
-      return ['error' => 'bad_request', 'message' => 'Missing or invalid id'];
+
+
+    /**
+     * GET /api/v1/video
+     * Query params:
+     *   - id (id vidéo canonique)
+     *   - OU slug=...
+     *   - OU (platform=..., platform_video_id=...)
+     *
+     * Options:
+     *   - timeseries=1 (retourne la série temporelle des snapshots par source)
+     *   - ts_limit (défaut 50)
+     */
+    public function get(): void
+    {
+        $pdo = $this->pdo();
+
+        $id   = isset($_GET['id']) ? (int)$_GET['id'] : null;
+        $slug = isset($_GET['slug']) ? trim((string)$_GET['slug']) : null;
+
+        $platform        = isset($_GET['platform']) ? strtoupper(trim((string)$_GET['platform'])) : null;
+        $platformVideoId = isset($_GET['platform_video_id']) ? trim((string)$_GET['platform_video_id']) : null;
+
+        $wantTs   = (isset($_GET['timeseries']) && (string)$_GET['timeseries'] === '1');
+        $tsLimit  = (int)($_GET['ts_limit'] ?? 50);
+        if ($tsLimit < 1) $tsLimit = 50;
+        if ($tsLimit > 1000) $tsLimit = 1000;
+
+        // Résolution de la vidéo (id)
+        if ($id === null && $slug !== null) {
+            $st = $pdo->prepare('SELECT id FROM video WHERE slug = ?');
+            $st->execute([$slug]);
+            $id = $st->fetchColumn();
+            $id = $id !== false ? (int)$id : null;
+        }
+
+        if ($id === null && $platform && $platformVideoId) {
+            // on retrouve la source puis la vidéo reliée
+            $st = $pdo->prepare('SELECT video_id FROM source_video WHERE platform = ? AND platform_video_id = ? LIMIT 1');
+            $st->execute([$platform, $platformVideoId]);
+            $vid = $st->fetchColumn();
+            $id = $vid !== false ? (int)$vid : null;
+        }
+
+        if ($id === null) {
+            Http::json(['error'=>'bad_request', 'message'=>'Provide id or slug or (platform,platform_video_id)'], 400);
+            return;
+        }
+
+        // Métadonnées vidéo
+        $st = $pdo->prepare('SELECT id, slug, title, description, published_at, duration_seconds, is_locked FROM video WHERE id = ?');
+        $st->execute([$id]);
+        $video = $st->fetch(\PDO::FETCH_ASSOC);
+        if (!$video) {
+            Http::json(['error'=>'not_found','id'=>$id], 404);
+            return;
+        }
+
+        // Rollup (dernier état agrégé pour la vidéo)
+        $st = $pdo->prepare('SELECT * FROM v_video_latest_rollup WHERE video_id = ?');
+        $st->execute([$id]);
+        $roll = $st->fetch(\PDO::FETCH_ASSOC);
+
+        // Sources liées
+        $st = $pdo->prepare('SELECT id, platform, platform_format, platform_channel_id, platform_video_id, title, url, etag, published_at, duration_seconds, is_active FROM source_video WHERE video_id = ? ORDER BY platform, platform_format, id');
+        $st->execute([$id]);
+        $sources = $st->fetchAll(\PDO::FETCH_ASSOC);
+
+        // Dernières métriques enrichies par source
+        $outSources = [];
+        foreach ($sources as $s) {
+            $sid = (int)$s['id'];
+            $latest = $pdo->prepare('SELECT * FROM v_source_latest_enriched WHERE source_video_id = ?');
+            $latest->execute([$sid]);
+            $m = $latest->fetch(\PDO::FETCH_ASSOC) ?: null;
+
+            $ts = null;
+            if ($wantTs) {
+                $series = $pdo->prepare('SELECT * FROM v_metric_snapshot_enriched WHERE source_video_id = ? ORDER BY snapshot_at DESC LIMIT ?');
+                $series->execute([$sid, $tsLimit]);
+                $ts = $series->fetchAll(\PDO::FETCH_ASSOC);
+            }
+
+            $outSources[] = [
+                'id' => $sid,
+                'platform' => $s['platform'],
+                'platform_format' => $s['platform_format'],
+                'platform_video_id' => $s['platform_video_id'],
+                'title' => $s['title'],
+                'url'   => $s['url'],
+                'published_at' => $s['published_at'],
+                'duration_seconds' => $s['duration_seconds'] !== null ? (int)$s['duration_seconds'] : null,
+                'is_active' => (int)$s['is_active'] === 1,
+                'latest' => $m,
+                'timeseries' => $ts,
+            ];
+        }
+
+        Http::json([
+            'video' => [
+                'id' => (int)$video['id'],
+                'slug' => $video['slug'],
+                'title'=> $video['title'],
+                'description' => $video['description'],
+                'published_at'=> $video['published_at'],
+                'duration_seconds' => $video['duration_seconds'] !== null ? (int)$video['duration_seconds'] : null,
+                'is_locked' => (int)$video['is_locked'] === 1,
+            ],
+            'rollup' => $roll,
+            'sources'=> $outSources
+        ], 200);
     }
-
-    // 2) Charger la vidéo + sources + dernier snapshot/ source
-    $pdo = $db->pdo();
-    $stmt = $pdo->prepare("
-      SELECT
-        v.id,
-        v.canonical_title,
-        v.canonical_description,
-        v.official_published_at,
-        COALESCE(SUM(CASE WHEN sv.platform <> 'WORDPRESS' THEN ms.views_3s ELSE 0 END),0) AS total_views_3s,
-        COALESCE(JSON_ARRAYAGG(JSON_OBJECT(
-          'id', sv.id,
-          'platform', sv.platform,
-          'platform_source_id', sv.platform_source_id,
-          'title', sv.title,
-          'permalink', sv.permalink_url,
-          'is_teaser', sv.is_teaser,
-          'published_at', sv.published_at,
-          'latest_views_3s', COALESCE(ms.views_3s, 0)
-        )), JSON_ARRAY()) AS sources
-      FROM video v
-      LEFT JOIN source_video sv ON sv.video_id = v.id
-      LEFT JOIN (
-        SELECT x.source_video_id, x.views_3s
-        FROM metric_snapshot x
-        INNER JOIN (
-          SELECT source_video_id, MAX(snapshot_at) AS last_snap
-          FROM metric_snapshot GROUP BY source_video_id
-        ) m ON m.source_video_id = x.source_video_id AND m.last_snap = x.snapshot_at
-      ) ms ON ms.source_video_id = sv.id
-      WHERE v.id = ?
-      GROUP BY v.id
-    ");
-    $stmt->execute([$id]);
-    $row = $stmt->fetch(\PDO::FETCH_ASSOC);
-
-    if (!$row) {
-      return ['error' => 'not_found', 'message' => 'Video not found'];
-    }
-
-    // 3) Normaliser la sortie (TZ locale + sources = tableau + agrégats par plateforme)
-    $row['published_at_local'] = self::toLocalIso($row['official_published_at'] ?? null, 'Europe/Zurich');
-
-    $sources = [];
-    if (isset($row['sources']) && is_string($row['sources'])) {
-      $dec = json_decode($row['sources'], true);
-      $sources = is_array($dec) ? $dec : [];
-    } elseif (is_array($row['sources'])) {
-      $sources = $row['sources'];
-    }
-
-    // Ajouter published_at_local pour chaque source
-    foreach ($sources as &$s) {
-      $s['published_at_local'] = self::toLocalIso($s['published_at'] ?? null, 'Europe/Zurich');
-    }
-    unset($s);
-
-    // Agrégats par plateforme
-    $byPlatform = [];
-    foreach ($sources as $s) {
-      $p = (string)($s['platform'] ?? '');
-      if ($p === '') continue;
-      if (!isset($byPlatform[$p])) {
-        $byPlatform[$p] = [
-          'platform' => $p,
-          'count' => 0,
-          'teasers' => 0,
-          'total_latest_views_3s' => 0,
-          'first_published_at_local' => null,
-          'last_published_at_local'  => null,
-          'primary_permalink' => null
-        ];
-      }
-      $byPlatform[$p]['count']++;
-      if (!empty($s['is_teaser'])) $byPlatform[$p]['teasers']++;
-      $byPlatform[$p]['total_latest_views_3s'] += (int)($s['latest_views_3s'] ?? 0);
-
-      $pl = $s['published_at_local'] ?? null;
-      if ($pl) {
-        if ($byPlatform[$p]['first_published_at_local'] === null || $pl < $byPlatform[$p]['first_published_at_local'])
-          $byPlatform[$p]['first_published_at_local'] = $pl;
-        if ($byPlatform[$p]['last_published_at_local'] === null || $pl > $byPlatform[$p]['last_published_at_local'])
-          $byPlatform[$p]['last_published_at_local'] = $pl;
-      }
-      if ($byPlatform[$p]['primary_permalink'] === null && empty($s['is_teaser'])) {
-        $byPlatform[$p]['primary_permalink'] = $s['permalink'] ?? null;
-      }
-    }
-
-    return [
-      'id' => (int)$row['id'],
-      'title' => (string)$row['canonical_title'],
-      'description' => (string)($row['canonical_description'] ?? ''),
-      'published_at' => $row['official_published_at'],
-      'published_at_local' => $row['published_at_local'],
-      'total_views_3s' => (int)($row['total_views_3s'] ?? 0),
-      'sources' => $sources,
-      'sources_by_platform' => array_values($byPlatform)
-    ];
-  }
-
-
-  private static function toLocalIso(?string $utc, string $tz): ?string {
-    if (!$utc) return null;
-    try {
-      $d = new \DateTimeImmutable($utc, new \DateTimeZone('UTC'));
-      return $d->setTimezone(new \DateTimeZone($tz))->format('c');
-    } catch (\Throwable $e) {
-      return $utc;
-    }
-  }
 }

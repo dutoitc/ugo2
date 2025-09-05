@@ -15,6 +15,12 @@ require_once __DIR__ . '/controllers/MetricsIngestController.php';
 require_once __DIR__ . '/controllers/VideosController.php';
 require_once __DIR__ . '/controllers/AggregatesController.php';
 require_once __DIR__ . '/controllers/ReconcileController.php';
+require_once __DIR__ . '/controllers/MetricsIngestController.php';
+require_once __DIR__ . '/controllers/OverridesController.php';
+require_once __DIR__ . '/services/MetricsIngestService.php';
+require_once __DIR__ . '/repositories/MetricsSnapshotRepository.php';
+require_once __DIR__ . '/repositories/SourceVideoRepository.php';
+require_once __DIR__ . '/domain/MetricsSnapshot.php';
 
 
 $router = new \Web\Router();

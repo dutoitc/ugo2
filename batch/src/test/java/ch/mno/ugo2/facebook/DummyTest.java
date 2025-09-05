@@ -17,9 +17,8 @@ class DummyTest {
 
     private static final String FB_VERSION = "v23.0";
 
-    private final ObjectMapper om = new ObjectMapper().findAndRegisterModules();
     private final WebClient fbWebClient = WebClient.builder().baseUrl("https://graph.facebook.com").build();
-    private final ch.mno.ugo2.facebook.FacebookClient client = new ch.mno.ugo2.facebook.FacebookClient(fbWebClient, om);
+    private final ch.mno.ugo2.facebook.FacebookClient client = new ch.mno.ugo2.facebook.FacebookClient(fbWebClient);
     private static final Properties properties = new Properties();
     private static String token;
 

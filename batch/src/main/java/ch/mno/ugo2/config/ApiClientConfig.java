@@ -2,16 +2,22 @@ package ch.mno.ugo2.config;
 
 import ch.mno.ugo2.api.WebApiClient;
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.web.reactive.function.client.ClientRequest;
+import org.springframework.web.reactive.function.client.ClientResponse;
+import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
 @Configuration
 @EnableConfigurationProperties(ApiClientConfig.ApiProps.class)
+@Slf4j
 public class ApiClientConfig {
 
     @Bean
@@ -30,9 +36,29 @@ public class ApiClientConfig {
     }
 
     @Bean
-    public WebClient facebookGraph(@Value("${ugo2.facebook.api-version:v23.0}") String v) {
-        return WebClient.builder().baseUrl("https://graph.facebook.com/" + v).build();
+    public WebClient facebookWebClient() {
+        return WebClient.builder().baseUrl("https://graph.facebook.com/").build();
     }
 
+    @Bean
+    public WebClient youtubeWebClient() {
+        return WebClient.builder().filter(maskedRequestLog()).filter(logResponse()).build();
+    }
+
+
+    protected ExchangeFilterFunction maskedRequestLog() {
+        return ExchangeFilterFunction.ofRequestProcessor((ClientRequest req) -> {
+            String u = req.url().toString().replaceAll("([?&]key=)[^&]+", "$1***");
+            log.debug("HTTP -> {} {}", req.method(), u);
+            return Mono.just(req);
+        });
+    }
+
+    protected ExchangeFilterFunction logResponse() {
+        return ExchangeFilterFunction.ofResponseProcessor((ClientResponse resp) -> {
+            log.debug("HTTP <- {}", resp.statusCode().value());
+            return Mono.just(resp);
+        });
+    }
 
 }

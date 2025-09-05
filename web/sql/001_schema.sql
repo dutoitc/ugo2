@@ -1,119 +1,113 @@
+/* 001_schema.sql
+ * Schéma UGO2 - révision "metrics v2"
+ * Convention: toutes les dates/horaires sont stockées en UTC.
+ */
 SET NAMES utf8mb4;
 SET time_zone = '+00:00';
---CREATE DATABASE IF NOT EXISTS `ugo2_prod` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
---USE `ugo2_prod`;
+SET FOREIGN_KEY_CHECKS = 0;
 
-CREATE TABLE person (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  full_name VARCHAR(160) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- Drop dans l'ordre des dépendances
+DROP TABLE IF EXISTS `metric_snapshot`;
+DROP TABLE IF EXISTS `source_video`;
+DROP TABLE IF EXISTS `video`;
 
-CREATE TABLE location (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  latitude DECIMAL(10,7),
-  longitude DECIMAL(10,7),
-  city VARCHAR(120),
-  region VARCHAR(120),
-  country CHAR(2) DEFAULT 'CH'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- =========================================================
+-- Table VIDEO (canon: regroupe des sources multi-plateformes)
+-- =========================================================
+CREATE TABLE `video` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `slug` VARCHAR(180) NULL,
+  `title` VARCHAR(500) NOT NULL,
+  `description` TEXT NULL,
+  `published_at` DATETIME(3) NULL,              -- UTC (canon)
+  `duration_seconds` INT UNSIGNED NULL,         -- longueur "canonique" si connue
+  `is_locked` TINYINT(1) NOT NULL DEFAULT 0,    -- protège la réconciliation
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_video_slug` (`slug`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE video (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  ext_uid VARCHAR(64) NULL UNIQUE,
-  canonical_title VARCHAR(255),
-  canonical_description TEXT,
-  official_published_at DATETIME,
-  location_id BIGINT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_video_loc FOREIGN KEY (location_id) REFERENCES location(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- =========================================================
+-- Table SOURCE_VIDEO (une source par plateforme/ID)
+-- =========================================================
+CREATE TABLE `source_video` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `video_id` BIGINT UNSIGNED NULL,                            -- lien optionnel vers VIDEO (peut être NULL avant réconciliation)
 
-CREATE TABLE video_presentateur (
-  video_id BIGINT NOT NULL,
-  person_id BIGINT NOT NULL,
-  PRIMARY KEY(video_id, person_id),
-  CONSTRAINT fk_vp_vid FOREIGN KEY (video_id) REFERENCES video(id) ON DELETE CASCADE,
-  CONSTRAINT fk_vp_per FOREIGN KEY (person_id) REFERENCES person(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `platform` ENUM('YOUTUBE','FACEBOOK','INSTAGRAM','TIKTOK') NOT NULL,
+  `platform_format` ENUM('VIDEO','SHORT','REEL') NULL,        -- type de contenu (YT: VIDEO/SHORT, FB: VIDEO/REEL, ...)
 
-CREATE TABLE video_realisateur (
-  video_id BIGINT NOT NULL,
-  person_id BIGINT NOT NULL,
-  PRIMARY KEY(video_id, person_id),
-  CONSTRAINT fk_vr_vid FOREIGN KEY (video_id) REFERENCES video(id) ON DELETE CASCADE,
-  CONSTRAINT fk_vr_per FOREIGN KEY (person_id) REFERENCES person(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `platform_channel_id` VARCHAR(190) NULL,
+  `platform_video_id`   VARCHAR(190) NOT NULL,                -- identifiant natif (ex: YouTube videoId, Facebook {pageId_postId})
 
-CREATE TABLE tag (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  label VARCHAR(80) UNIQUE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `title` VARCHAR(500) NULL,
+  `description` TEXT NULL,
+  `url` VARCHAR(500) NULL,
+  `etag` VARCHAR(190) NULL,                                   -- si APIs exposent un etag/version
 
-CREATE TABLE video_tag (
-  video_id BIGINT NOT NULL,
-  tag_id BIGINT NOT NULL,
-  PRIMARY KEY(video_id, tag_id),
-  CONSTRAINT fk_vt_vid FOREIGN KEY (video_id) REFERENCES video(id) ON DELETE CASCADE,
-  CONSTRAINT fk_vt_tag FOREIGN KEY (tag_id) REFERENCES tag(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `published_at` DATETIME(3) NULL,                            -- UTC selon la plateforme
+  `duration_seconds` INT UNSIGNED NULL,                       -- longueur au niveau source
 
-CREATE TABLE source_video (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  platform VARCHAR(16) NOT NULL,
-  platform_source_id VARCHAR(64) NOT NULL,
-  video_id BIGINT NULL,
-  is_teaser TINYINT(1) NOT NULL DEFAULT 0,
-  locked TINYINT(1) NOT NULL DEFAULT 0,
-  title VARCHAR(255),
-  description TEXT,
-  permalink_url VARCHAR(512),
-  media_type VARCHAR(20),
-  duration_seconds INT,
-  published_at DATETIME,
-  etag VARCHAR(128),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_src (platform, platform_source_id),
-  KEY idx_src_vid (video_id),
-  KEY idx_src_published (published_at),
-  CONSTRAINT fk_src_video FOREIGN KEY (video_id) REFERENCES video(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
 
-CREATE TABLE metric_snapshot (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  source_video_id BIGINT NOT NULL,
-  snapshot_at DATETIME NOT NULL,
-  views_3s INT NOT NULL DEFAULT 0,
-  views_platform_raw INT DEFAULT 0,
-  comments INT DEFAULT 0,
-  shares INT DEFAULT 0,
-  reactions INT DEFAULT 0,
-  saves INT DEFAULT 0,
-  UNIQUE KEY uq_snap (source_video_id, snapshot_at),
-  KEY idx_snap_src (source_video_id),
-  CONSTRAINT fk_snap_src FOREIGN KEY (source_video_id) REFERENCES source_video(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-CREATE TABLE reconcile_override (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  source_video_id BIGINT NOT NULL,
-  action VARCHAR(16) NOT NULL,
-  target_video_id BIGINT NULL,
-  created_by VARCHAR(128) DEFAULT 'api',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  KEY idx_ro_source (source_video_id),
-  CONSTRAINT fk_ro_source FOREIGN KEY (source_video_id) REFERENCES source_video(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_source_platform_vid` (`platform`,`platform_video_id`),
+  ADD UNIQUE KEY uq_source_platform_video (platform, platform_video_id),
+  KEY `idx_source_video_video_id` (`video_id`),
 
-CREATE TABLE api_idempotency (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  idem_key VARCHAR(64) NOT NULL,
-  route VARCHAR(120) NOT NULL,
-  request_hash CHAR(64) NOT NULL,
-  response_code INT NOT NULL,
-  response_body MEDIUMTEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_idem (idem_key)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  CONSTRAINT `fk_source_video__video`
+    FOREIGN KEY (`video_id`) REFERENCES `video`(`id`)
+    ON UPDATE RESTRICT ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- =========================================================
+-- Table METRIC_SNAPSHOT (métriques brutes par source et par instant)
+-- =========================================================
+CREATE TABLE `metric_snapshot` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `source_video_id` BIGINT UNSIGNED NOT NULL,
+  `snapshot_at` DATETIME(3) NOT NULL,                          -- UTC
+
+  -- vues natives cross-plateforme (définition propre à chaque plateforme)
+  `views_native` BIGINT UNSIGNED NULL,
+
+  -- temps de visionnage
+  `avg_watch_seconds` INT UNSIGNED NULL,
+  `total_watch_seconds` BIGINT UNSIGNED NULL,
+  `video_length_seconds` INT UNSIGNED NULL,                    -- longueur au moment du snapshot (si dispo)
+
+  -- audience
+  `reach` BIGINT UNSIGNED NULL,
+  `unique_viewers` BIGINT UNSIGNED NULL,
+
+  -- engagement brut
+  `likes` BIGINT UNSIGNED NULL,
+  `comments` BIGINT UNSIGNED NULL,
+  `shares` BIGINT UNSIGNED NULL,
+
+  -- réactions détaillées (surtout FB)
+  `reactions_total` BIGINT UNSIGNED NULL,
+  `reactions_like`  BIGINT UNSIGNED NULL,
+  `reactions_love`  BIGINT UNSIGNED NULL,
+  `reactions_wow`   BIGINT UNSIGNED NULL,
+  `reactions_haha`  BIGINT UNSIGNED NULL,
+  `reactions_sad`   BIGINT UNSIGNED NULL,
+  `reactions_angry` BIGINT UNSIGNED NULL,
+
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_ms_source_time` (`source_video_id`,`snapshot_at`),
+
+  CONSTRAINT `fk_metric_snapshot__source_video`
+    FOREIGN KEY (`source_video_id`) REFERENCES `source_video`(`id`)
+    ON UPDATE RESTRICT ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+SET FOREIGN_KEY_CHECKS = 1;
+

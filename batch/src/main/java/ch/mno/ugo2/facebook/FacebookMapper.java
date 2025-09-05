@@ -38,13 +38,12 @@ public class FacebookMapper {
 
     return MetricsUpsertItem.builder()
       .platform("FACEBOOK")
-      .platform_source_id(v.id())
-      .captured_at(at.toInstant().toString())
-      .views_3s(views)
-      .views_platform_raw(views)
-      .comments(comments)
-      .shares(shares)
-      .reactions(reacts)
+      .platform_video_id(v.id())
+      .snapshot_at(at.toInstant())
+            .views_native(views==null?0:views.longValue())
+      .comments(comments==null?0:comments.longValue())
+      .shares(shares==null?0:shares.longValue())
+      // .reactions(reacts) // TODO
       .build();
   }
 

@@ -37,12 +37,26 @@
         renderTable(data.items||[]);
       }
 
-      function sumPlatforms(sources){
-        const acc = {FACEBOOK:0, YOUTUBE:0, INSTAGRAM:0, WORDPRESS:0};
-        (sources||[]).forEach(s=>{ const v=parseInt(s.latest_views_3s||0,10)||0; if(acc[s.platform]==null) acc[s.platform]=0; acc[s.platform]+=v; });
-        const sommeSansWp = (acc.FACEBOOK||0)+(acc.YOUTUBE||0)+(acc.INSTAGRAM||0);
-        return {acc, sommeSansWp};
-      }
+         function sumPlatforms(v){
+           const acc = {FACEBOOK:0, YOUTUBE:0, INSTAGRAM:0, WORDPRESS:0};
+           // 1) si on a les sources détaillées (page détail) → somme latest_views_3s
+           if (Array.isArray(v.sources) && v.sources.length) {
+             v.sources.forEach(s=>{
+               const plat = s.platform || '';
+               const val = Number(s.latest_views_3s ?? s.views_native ?? s.views ?? 0) || 0;
+               if (acc[plat] == null) acc[plat] = 0;
+               acc[plat] += val;
+             });
+           // 2) sinon, utiliser l’agrégat by_platform renvoyé par /api/v1/videos
+           } else if (v.by_platform && typeof v.by_platform === 'object') {
+             Object.entries(v.by_platform).forEach(([plat, val])=>{
+               if (acc[plat] == null) acc[plat] = 0;
+               acc[plat] += Number(val) || 0;
+             });
+           }
+           const sommeSansWp = (acc.FACEBOOK||0) + (acc.YOUTUBE||0) + (acc.INSTAGRAM||0);
+           return {acc, sommeSansWp};
+         }
 
       function renderTable(items){
         const wrap = $('#tableWrap');
@@ -86,13 +100,13 @@
         const tbody = el('tbody');
 
         sorted.forEach(v=>{
-          const {acc, sommeSansWp} = sumPlatforms(v.sources||[]);
+          const {acc, sommeSansWp} = sumPlatforms(v);
           totFB += acc.FACEBOOK||0; totYT += acc.YOUTUBE||0; totIG += acc.INSTAGRAM||0; totWP += acc.WORDPRESS||0; totSum += sommeSansWp||0;
 
           const tr = el('tr');
-          const dateCell = el('td','date', new Date(v.published_at_local||v.official_published_at).toLocaleDateString('fr-CH',{dateStyle:'medium'}));
+          const dateCell = el('td','date', new Date(v.published_at || v.published_at_local || v.official_published_at).toLocaleDateString('fr-CH',{dateStyle:'medium'}));
           const titleCell = el('td','title');
-          const a = document.createElement('a'); a.className='a'; a.href=`/src/front/video.html?id=${v.id}`; a.textContent=v.canonical_title||'(sans titre)';
+          const a = document.createElement('a'); a.className='a'; a.href=`/src/front/video.html?id=${v.id}`; a.textContent=v.title||'(sans titre)';
           titleCell.append(a);
 
           const fb = chip(acc.FACEBOOK);
@@ -127,9 +141,12 @@
       function format(n){ n = parseInt(n||0,10)||0; return n.toLocaleString('fr-CH'); }
 
       function keyVal(v, key){
-        const {acc, sommeSansWp} = sumPlatforms(v.sources||[]);
+        const {acc, sommeSansWp} = sumPlatforms(v);
         switch(key){
-          case 'date': return new Date(v.published_at_local||v.official_published_at).getTime();
+          case 'date': {
+                const t = new Date(v.published_at || v.published_at_local || v.official_published_at).getTime();
+                return isNaN(t) ? 0 : t;
+          }
           case 'title': return (v.canonical_title||'').toLowerCase();
           case 'fb': return acc.FACEBOOK||0;
           case 'yt': return acc.YOUTUBE||0;

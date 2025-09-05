@@ -107,6 +107,28 @@ public class WebApiClient {
                         log.warn("API {} -> {} body={}", path, e.getRawStatusCode(), e.getResponseBodyAsString()));
     }
 
+    public Mono<String> postJsonForBody(String path, Object payload) {
+        String jsonLabel;
+        try {
+            jsonLabel = payload == null ? "{}" : payload.toString();
+        } catch (Exception e) {
+            jsonLabel = "<payload>";
+        }
+        log.info("API POST {} (payload={})", path, jsonLabel.length() > 120 ? jsonLabel.substring(0, 120)+"…" : jsonLabel);
+
+        return webClient.post()
+                .uri(path)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(payload == null ? "{}" : payload)
+                .exchangeToMono(resp -> resp.bodyToMono(String.class).defaultIfEmpty("")
+                        .map(body -> {
+                            log.info("API {} -> {} body={}", path, resp.statusCode(), body);
+                            return body;
+                        })
+                );
+    }
+
+
     /**
      * DTO JSON pour /sources:filterMissing
      */

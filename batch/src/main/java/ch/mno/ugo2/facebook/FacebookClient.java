@@ -1,5 +1,6 @@
 package ch.mno.ugo2.facebook;
 
+import ch.mno.ugo2.common.AbstractClient;
 import ch.mno.ugo2.facebook.dto.FbError;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +16,6 @@ import reactor.util.retry.Retry;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Client Graph API minimaliste et typé.
@@ -25,11 +25,11 @@ import java.util.Objects;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
-public class FacebookClient {
+public class FacebookClient extends AbstractClient {
 
-    private final WebClient http;       // Déclarez un bean @Qualifier("facebookWebClient") pointant sur https://graph.facebook.com
-    private final ObjectMapper om;
+    public FacebookClient(WebClient facebookWebClient) {
+        super(facebookWebClient);
+    }
 
     public <T> reactor.core.publisher.Mono<T> get(FacebookQuery q, Class<T> type) {
         return get(q.getPath(), q.getParams(), type);
@@ -111,11 +111,4 @@ public class FacebookClient {
                 .onRetryExhaustedThrow((spec, sig) -> sig.failure());
     }
 
-    private <T> T safeParse(String body, Class<T> type) {
-        try {
-            return om.readValue(body, type);
-        } catch (Exception e) {
-            return null;
-        }
-    }
 }
