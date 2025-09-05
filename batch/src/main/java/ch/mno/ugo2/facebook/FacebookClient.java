@@ -2,8 +2,6 @@ package ch.mno.ugo2.facebook;
 
 import ch.mno.ugo2.common.AbstractClient;
 import ch.mno.ugo2.facebook.dto.FbError;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatusCode;

@@ -37,3 +37,6 @@ replay_pid*
 /batch/src/main/resources/application.properties
 /.ugo2
 chk.php
+/batch/src/test/resources/real.properties
+/web/testui-capstv.sh
+/web/myconnectweb.sh

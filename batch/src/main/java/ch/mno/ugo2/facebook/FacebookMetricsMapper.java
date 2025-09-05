@@ -1,6 +1,7 @@
 package ch.mno.ugo2.facebook;
 
 import ch.mno.ugo2.dto.MetricsUpsertItem;
+import ch.mno.ugo2.facebook.responses.VideoResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.time.Instant;
@@ -10,14 +11,15 @@ public final class FacebookMetricsMapper {
 
     private FacebookMetricsMapper() {}
 
-    public static MetricsUpsertItem fromVideoAndInsights(JsonNode video, Map<String, Long> insights) {
-        String id = text(video, "id");
+    public static MetricsUpsertItem fromVideoAndInsights(VideoResponse video, Map<String, Long> insights) {
+        String id = video.id();
 
-        String productType = text(video, "product_type"); // "reels" si reel
-        boolean isReelFlag = video.path("is_reel").asBoolean(false);
-        String platformFormat = (isReelFlag || "reels".equalsIgnoreCase(productType)) ? "REEL" : "VIDEO";
+        //String productType = video.text(video, "product_type"); // "reels" si reel
+        //boolean isReelFlag = video.path("is_reel").asBoolean(false);
+        //String platformFormat = (isReelFlag || "reels".equalsIgnoreCase(productType)) ? "REEL" : "VIDEO";
+        String platformFormat = "VIDEO"; // how to know if it is a reel ?
 
-        Integer lengthSec = intOrNull(video, "length");
+        Integer lengthSec = video.length();
 
         Long viewsNative = pickFirst(insights,
                 "total_video_views", "post_video_views", "play_count", "video_play_count", "total_plays");

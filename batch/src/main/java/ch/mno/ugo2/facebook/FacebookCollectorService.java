@@ -2,8 +2,13 @@ package ch.mno.ugo2.facebook;
 
 import ch.mno.ugo2.config.FacebookProps;
 import ch.mno.ugo2.dto.MetricsUpsertItem;
+import ch.mno.ugo2.facebook.responses.FacebookPostsResponse;
+import ch.mno.ugo2.facebook.responses.InsightValue;
+import ch.mno.ugo2.facebook.responses.InsightsResponse;
+import ch.mno.ugo2.facebook.responses.VideoResponse;
 import ch.mno.ugo2.service.WebApiSinkService;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.apache.commons.lang3.StringUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -72,32 +77,32 @@ public class FacebookCollectorService {
 
         do {
             var q = FacebookQuery.buildQueryPublishedPosts(cfg, pageId, after);
-            JsonNode resp = fb.get(q, JsonNode.class).block();
+            var resp = fb.get(q, FacebookPostsResponse.class).block();
             if (resp == null) break;
 
-            JsonNode data = resp.get("data");
-            if (data != null && data.isArray()) {
-                for (JsonNode post : data) {
+            var data = resp.getData();
+            if (data != null) {
+                for (var post : data) {
                     // attachments{media_type,target{id}}
-                    JsonNode attachments = post.path("attachments").path("data");
-                    if (attachments.isArray()) {
-                        for (JsonNode att : attachments) {
-                            String mediaType = att.path("media_type").asText("");
-                            String targetId  = att.path("target").path("id").asText(null);
-                            if (targetId == null || targetId.isBlank()) continue;
+                    var attachments = post.getAttachments().getData();
+                    for (var att : attachments) {
+                        String mediaType = att.getMediaType();
+                        if (att.getTarget()==null) continue;
+                        String targetId  = att.getTarget().getId();
+                        if (StringUtils.isBlank(targetId)) continue;
 
-                            // on garde les objets vidéo/reel uniquement
-                            if (mediaType.toLowerCase(Locale.ROOT).contains("video")) {
-                                out.add(targetId); // videoId (utilisable pour /{id} et /{id}/video_insights)
-                            }
+                        // on garde les objets vidéo/reel uniquement
+                        if (mediaType.toLowerCase(Locale.ROOT).contains("video")) {
+                            out.add(targetId); // videoId (utilisable pour /{id} et /{id}/video_insights)
                         }
                     }
                 }
             }
 
             // pagination
-            String nextAfter = resp.path("paging").path("cursors").path("after").asText(null);
-            after = (nextAfter != null && !nextAfter.isBlank()) ? nextAfter : null;
+            if (resp.getPaging()==null) break;
+            String nextAfter = resp.getPaging().getCursors().getAfter();
+            after = StringUtils.isNotBlank(nextAfter)? nextAfter : null;
 
             pages++;
         } while (after != null);
@@ -111,19 +116,19 @@ public class FacebookCollectorService {
         FacebookQuery videoQ = FacebookQuery.builder()
                 .version(cfg.getApiVersion())
                 .video(id)
-                .fields("id,permalink_url,created_time,length,is_reel")
+                .fields("id,permalink_url,created_time,length") // exists: length,post_views,likes,title,description,views,published,scheduled_publish_time
                 .accessToken(cfg.getAccessToken())
                 .build();
 
         // 2) Insights (superset)
         FacebookQuery insightsQ = FacebookQuery.buildQueryInsights(cfg, id, null); // null = all metrics
 
-        Mono<JsonNode> videoMono    = fb.get(videoQ, JsonNode.class);
-        Mono<JsonNode> insightsMono = fb.get(insightsQ, JsonNode.class);
+        Mono<VideoResponse> videoMono    = fb.get(videoQ, VideoResponse.class);
+        Mono<InsightsResponse> insightsMono = fb.get(insightsQ, InsightsResponse.class);
 
         return Mono.zip(videoMono, insightsMono)
                 .map(t -> {
-                    JsonNode video = t.getT1();
+                    VideoResponse video = t.getT1();
                     Map<String, Long> insights = toInsightMap(t.getT2());
                     return FacebookMetricsMapper.fromVideoAndInsights(video, insights);
                 })
@@ -133,27 +138,26 @@ public class FacebookCollectorService {
                 });
     }
 
-    private Map<String, Long> toInsightMap(JsonNode insightsResp) {
+    private Map<String, Long> toInsightMap(InsightsResponse insightsResp) {
         Map<String, Long> out = new LinkedHashMap<>();
         if (insightsResp == null) return out;
 
-        JsonNode data = insightsResp.get("data");
-        if (data == null || !data.isArray()) return out;
+        var data = insightsResp.data();
+        if (data == null) return out;
 
-        for (JsonNode metric : data) {
-            String name = metric.path("name").asText(null);
+        for (var metric : data) {
+            String name = metric.name();
             if (name == null) continue;
 
-            Long v = extractFirstValue(metric.path("values"));
+            Long v = extractFirstValue(metric.values());
             if (v != null) out.put(name, v);
         }
         return out;
     }
 
-    private Long extractFirstValue(JsonNode valuesNode) {
-        if (valuesNode == null || !valuesNode.isArray() || valuesNode.isEmpty()) return null;
-        JsonNode first = valuesNode.get(0);
-        JsonNode val = first.get("value");
+    private Long extractFirstValue(List<InsightValue> valuesNode) {
+        if (valuesNode == null || valuesNode.isEmpty()) return null;
+        JsonNode val = valuesNode.getFirst().value();
         if (val == null) return null;
 
         if (val.isNumber()) return val.longValue();
