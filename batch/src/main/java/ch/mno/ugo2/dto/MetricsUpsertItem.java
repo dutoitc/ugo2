@@ -11,8 +11,8 @@ import java.time.Instant;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class MetricsUpsertItem {
     String platform;           // "YOUTUBE" | "FACEBOOK" | "INSTAGRAM" | "TIKTOK"
-    String platform_format;    // "VIDEO" | "SHORT" | "REEL" (optionnel mais recommandé)
-    Long   source_video_id;    // soit ça…
+        String platform_format;    // "VIDEO" | "SHORT" | "REEL" (optionnel mais recommandé)
+        Long   source_video_id;    // soit ça…
     String platform_video_id;  // … soit ce couple (avec platform)
 
     Instant snapshot_at;       // optionnel (Z); sinon serveur = now UTC

@@ -48,40 +48,37 @@ final class MetricsIngestController
             // Plateforme
             $platform = strtoupper((string)($s['platform'] ?? 'YOUTUBE'));
 
-            // ID vidéo (tolère plusieurs noms)
-            $pvid = $s['platform_video_id']
-                ?? $s['platformId']
-                ?? $s['platform_source_id']
-                ?? $s['externalId']
-                ?? $s['id']
-                ?? null;
+            // ID vidéo
+            $pvid = $s['platform_video_id']?? null;
 
             if ($pvid === null || $pvid === '') { $skipped++; continue; }
             $pvid = (string)$pvid;
 
-            // Horodatage du snapshot (ISO). Si absent -> maintenant (UTC).
-            $snapAt = $s['snapshot_at'] ?? $s['snapshotAt'] ?? null;
-            if (!$snapAt) $snapAt = gmdate('c'); // ex: 2025-09-04T18:58:03Z
-
-            // Vues : on accepte plusieurs champs. On remplit à la fois views_3s ET/OU views_native si dispo.
-            $views3s     = $s['views_3s'] ?? null;
-            $views30s    = $s['views_30s'] ?? null;
-            $viewsNative = $s['views_native'] ?? $s['views'] ?? $s['viewCount'] ?? null;
-
-            // Engagements
-            $likes    = $s['likes'] ?? $s['likeCount'] ?? null;
-            $comments = $s['comments'] ?? $s['commentCount'] ?? null;
-
             $norm[] = [
                 'platform'          => $platform,
                 'platform_video_id' => $pvid,
-                'snapshot_at'       => $snapAt,
-                // Les 3 clés ci-dessous existent maintenant quoi qu’envoie le batch
-                'views_3s'          => is_null($views3s)     ? null : (int)$views3s,
-                'views_30s'         => is_null($views30s)    ? null : (int)$views30s,
-                'views_native'      => is_null($viewsNative) ? null : (int)$viewsNative,
-                'likes'             => is_null($likes)       ? null : (int)$likes,
-                'comments'          => is_null($comments)    ? null : (int)$comments,
+                'snapshot_at'       => $s['snapshot_at']  ?? null,
+                'views_native'      => self::toNullableInt($s['views_native'] ?? null),
+                'likes'             => self::toNullableInt($s['likes'] ?? null),
+                'comments'          => self::toNullableInt($s['comments'] ?? null),
+
+                'avg_watch_seconds'     => self::toNullableFloat($s['avg_watch_seconds'] ?? null),
+                'total_watch_seconds'   => self::toNullableFloat($s['total_watch_seconds'] ?? null),
+                'video_length_seconds'  => self::toNullableInt($s['video_length_seconds'] ?? null),
+
+                'reach'                 => self::toNullableInt($s['reach'] ?? null),
+                'unique_viewers'        => self::toNullableInt($s['unique_viewers'] ?? null),
+                'shares'                => self::toNullableInt($s['shares'] ?? null),
+
+                'reactions_total'       => self::toNullableInt($s['reactions_total'] ?? null),
+                'reactions_like'        => self::toNullableInt($s['reactions_like'] ?? null),
+                'reactions_love'        => self::toNullableInt($s['reactions_love'] ?? null),
+                'reactions_wow'         => self::toNullableInt($s['reactions_wow'] ?? null),
+                'reactions_haha'        => self::toNullableInt($s['reactions_haha'] ?? null),
+                'reactions_sad'         => self::toNullableInt($s['reactions_sad'] ?? null),
+                'reactions_angry'       => self::toNullableInt($s['reactions_angry'] ?? null),
+
+                'legacy_views_3s'       => self::toNullableInt($s['legacy_views_3s'] ?? $s['views_3s'] ?? null),
             ];
         }
 
@@ -89,7 +86,7 @@ final class MetricsIngestController
         error_log(sprintf(
             '[metrics:batchUpsert] recv=%d norm=%d skipped=%d sample=%s',
             count($in), count($norm), $skipped,
-            json_encode($norm[0] ?? null, JSON_UNESCAPED_SLASHES)
+            json_encode($norm[0] ?? null, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE)
         ));
 
         // --- Appel service --------------------------------------------------------
@@ -100,13 +97,59 @@ final class MetricsIngestController
                 'status' => 'ok',
                 'ok'     => $result['ok'],
                 'ko'     => $result['ko'],
-                'items'  => $result['items'], // garde le détail du service si présent
-                'skipped_pre' => $skipped
+                'items'  => $result['items'],
+                'skipped_pre' => $skipped,
             ], 200);
         } catch (\Throwable $e) {
             error_log('[metrics:batchUpsert] ERROR: '.$e->getMessage());
             Http::json(['error'=>'internal_error', 'message'=>$e->getMessage()], 500);
         }
+    }
+
+    // --- Helpers --------------------------------------------------------------
+
+    /** Accepte ISO string, epoch secondes, epoch millisecondes; renvoie ISO UTC */
+    // Dans MetricsIngestController
+
+    private static function toIsoUtc(mixed $v): ?string
+    {
+        if ($v === null || $v === '') return null;
+
+        // Cas numériques (int/float/chaîne de chiffres) -> epoch s/ms
+        if (is_int($v) || is_float($v) || (is_string($v) && ctype_digit($v))) {
+            $num = (float)$v;
+            // 13 chiffres => ms ; 10 => s
+            if ($num > 1e12) $num /= 1000.0; // ms -> s
+            $ts = (int)round($num);
+            return gmdate('c', $ts); // ex: 2025-09-05T07:35:52+00:00
+        }
+
+        // Chaînes ISO variées, ou "Y-m-d H:i:s"
+        $s = trim((string)$v);
+        try {
+            // Autorise "YYYY-mm-dd HH:ii:ss" en le traitant comme UTC
+            if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $s)) {
+                $dt = new \DateTimeImmutable($s.' UTC');
+            } else {
+                $dt = new \DateTimeImmutable($s);
+            }
+            return $dt->setTimezone(new \DateTimeZone('UTC'))->format('c');
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+
+    private static function toNullableInt(mixed $v): ?int
+    {
+        if ($v === null || $v === '') return null;
+        return (int)$v;
+    }
+
+    private static function toNullableFloat(mixed $v): ?float
+    {
+        if ($v === null || $v === '') return null;
+        return (float)$v;
     }
 
 }

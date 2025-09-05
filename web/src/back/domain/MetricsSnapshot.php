@@ -10,7 +10,7 @@ final class MetricsSnapshot
     public ?int $source_video_id;             // soit ça…
     public ?string $platform_video_id;        // …soit (platform, platform_video_id)
 
-    public string $snapshot_atUtc;            // 'YYYY-MM-DD HH:MM:SS.mmm' UTC (DATETIME(3))
+    public string $snapshot_atIso;            // 'YYYY-MM-DD HH:MM:SS.mmm' UTC (DATETIME(3))
 
     // bruts
     public ?int $views_native;
@@ -37,7 +37,7 @@ final class MetricsSnapshot
      * Normalise et valide un item.
      * Applique le mapping legacy: legacy_views_3s -> views_native pour FACEBOOK/VIDEO.
      */
-    public static function fromArray(array $s, ?string $defaultNowUtcMillis = null): self
+    public static function fromArray(array $s, ?string $defaultNowIsoMs  = null): self
     {
         $self = new self();
 
@@ -59,7 +59,8 @@ final class MetricsSnapshot
             throw new \InvalidArgumentException('Provide source_video_id or (platform, platform_video_id)');
         }
 
-        $self->snapshot_atUtc = self::toUtcMillisString($s['snapshot_at'] ?? null, $defaultNowUtcMillis);
+        $self->snapshot_atIso = self::toUtcIsoMillis($s['snapshot_at'] ?? null, $defaultNowIsoMs);
+
 
         // mapping legacy
         $viewsNative = self::toUIntOrNull($s['views_native'] ?? null);
@@ -98,32 +99,25 @@ final class MetricsSnapshot
         return $n < 0 ? 0 : $n;
     }
 
-   /**
-    * Accepte :
-    *  - string ISO-8601 ("2025-09-05T06:15:00Z" ou "2025-09-05 06:15:00")
-    *  - entier/float epoch en secondes ou millisecondes
-    * Retourne des millisecondes epoch (string, UTC) ou null si invalide.
-    */
-   private static function toUtcMillisString($value): ?string
+   /** Retourne 'YYYY-MM-DD HH:MM:SS.mmm' (UTC) */
+   private static function toUtcIsoMillis(mixed $v, ?string $fallbackIsoMs = null): string
    {
-       if ($value === null || $value === '') return null;
-
-       // 1) Numérique → epoch
-       if (is_int($value) || is_float($value) || (is_string($value) && ctype_digit($value))) {
-           $num = (int)$value;
-           if ($num < 0) return null;
-           // Heuristique : >= 10^12 => millisecondes, sinon secondes
-           $ms = ($num >= 100000000000) ? $num : $num * 1000;
-           return (string)$ms;
+       if ($v === null || $v === '') {
+           return $fallbackIsoMs ?? gmdate('Y-m-d H:i:s').'.000';
        }
 
-       // 2) Chaîne date ISO → epoch
-       if (is_string($value)) {
-           $ts = strtotime($value);
-           if ($ts === false) return null;
-           return (string)($ts * 1000);
+       // Numérique → epoch (s ou ms)
+       if (is_int($v) || is_float($v) || (is_string($v) && ctype_digit($v))) {
+           $num = (int)$v;
+           $sec = ($num >= 100000000000) ? intdiv($num, 1000) : $num;
+           $ms  = ($num >= 100000000000) ? ($num % 1000)       : 0;
+           $dt  = (new \DateTimeImmutable('@'.$sec))->setTimezone(new \DateTimeZone('UTC'));
+           return $dt->format('Y-m-d H:i:s').'.'.str_pad((string)$ms, 3, '0', STR_PAD_LEFT);
        }
 
-       return null;
+       // ISO → UTC
+       $dt = (new \DateTimeImmutable((string)$v))->setTimezone(new \DateTimeZone('UTC'));
+       $ms = (int) floor(((int)$dt->format('u')) / 1000);
+       return $dt->format('Y-m-d H:i:s').'.'.str_pad((string)$ms, 3, '0', STR_PAD_LEFT);
    }
 }

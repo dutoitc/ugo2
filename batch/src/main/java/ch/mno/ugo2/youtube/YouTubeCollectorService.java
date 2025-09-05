@@ -3,12 +3,11 @@ package ch.mno.ugo2.youtube;
 import ch.mno.ugo2.config.YouTubeProps;
 import ch.mno.ugo2.dto.MetricsUpsertItem;
 import ch.mno.ugo2.service.WebApiSinkService;
-import ch.mno.ugo2.youtube.responses.ChannelsContentDetailsResponse;
 import ch.mno.ugo2.youtube.responses.PlaylistItemsResponse;
 import ch.mno.ugo2.youtube.responses.VideoListResponse;
-import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -17,6 +16,7 @@ import reactor.core.scheduler.Schedulers;
 
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Collecte l'historique des vidéos de chaînes configurées puis pousse les métriques vers l'API.
@@ -71,37 +71,14 @@ public class YouTubeCollectorService {
 
         return Flux.fromIterable(chunks)
                 .flatMap(chunk -> yt.videosList(apiKey, chunk))
-                .flatMap(resp -> Flux.fromIterable(
-                        Optional.ofNullable(resp.getItems()).orElseGet(List::of)))
+                .flatMap(resp -> Flux.fromIterable(Optional.ofNullable(resp.getItems()).orElseGet(List::of)))
                 .collectList()
                 .flatMap(items -> {
                     if (items.isEmpty()) return Mono.just(0);
 
-                    // 1) build SOURCES
-                    List<SourceUpsertItem> sources = new ArrayList<>(items.size());
-                    // 2) build METRICS
-                    List<MetricsUpsertItem> snapshots = new ArrayList<>(items.size());
-
-                    for (VideoListResponse.Item it : items) {
-                        var s  = it.getSnippet();
-                        var cd = it.getContentDetails();
-                        sources.add(SourceUpsertItem.builder()
-                                .platform("YOUTUBE")
-                                .platform_source_id(it.getId())                    // clé de source = id vidéo
-                                .title(s.getTitle())
-                                .description(s.getDescription())
-                                .permalink_url("https://www.youtube.com/watch?v=" + it.getId())
-                                .media_type(cd.getDuration().toSeconds() <= 60 ? "SHORT" : "VIDEO")
-                                .duration_seconds((int)cd.getDuration().toSeconds())
-                                .published_at(s.getPublishedAt().toString())                  // déjà ISO-8601
-                                .is_teaser(0)
-                                .video_id(null)
-                                .locked(0)
-                                .build());
-
-                        snapshots.add(YouTubeMetricsMapper.fromVideoResource(it));
-                    }
-
+                    // build SOURCES, METRICS
+                    List<SourceUpsertItem> sources = items.stream().map(YouTubeMetricsMapper::mapSourceUpsertItem).toList();
+                    List<MetricsUpsertItem> snapshots = items.stream().map(YouTubeMetricsMapper::mapMetricsUpsertItem).toList();
                     log.info("[YT] mapped {} sources & {} snapshots", sources.size(), snapshots.size());
 
                     // ⚠️ Appels BLOQUANTS déplacés sur boundedElastic
@@ -114,11 +91,12 @@ public class YouTubeCollectorService {
                 });
     }
 
+
     /* ------------------- internals ------------------- */
 
     private String findUploadsPlaylist(String apiKey, String channelId) {
         log.info("findUploadsPlaylist, channelId={}", channelId);
-        ChannelsContentDetailsResponse response = yt.channelsContentDetails(apiKey, channelId).block();
+        var response = yt.channelsContentDetails(apiKey, channelId).block();
         if (response == null) return null;
         var items = response.getItems();
         if (items == null || items.isEmpty()) return null;
@@ -139,11 +117,11 @@ public class YouTubeCollectorService {
             if (items != null) {
                 for (PlaylistItemsResponse.Item it : items) {
                     String vid = it.getContentDetails().getVideoId();
-                    if (vid != null && !vid.isBlank()) out.add(vid);
+                    if (StringUtils.isNotBlank(vid)) out.add(vid);
                 }
             }
             String next = page.getNextPageToken();
-            pageToken = (next != null && !next.isBlank()) ? next : null;
+            pageToken = StringUtils.isNotBlank(next)?next:null;;
         } while (pageToken != null);
         log.info("[YT] playlist {} -> {} videoIds", playlistId, out.size());
         return out;

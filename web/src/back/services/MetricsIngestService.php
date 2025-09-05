@@ -30,14 +30,17 @@ final class MetricsIngestService
      */
     public function ingestBatch(array $snapshots): array
     {
-        $nowUtcMillis = substr((new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d H:i:s.u'), 0, 23);
+        $nowIsoMsUtc = substr(
+                (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d H:i:s.u'),
+                0, 23
+            );
 
         $ok=0; $ko=0; $items=[];
         $this->pdo->beginTransaction();
         try {
             foreach ($snapshots as $i => $s) {
                 try {
-                    $dto = MetricsSnapshot::fromArray($s, $nowUtcMillis);
+                    $dto = MetricsSnapshot::fromArray($s, $nowIsoMsUtc);
 
                     $sourceId = $dto->source_video_id;
                     if ($sourceId === null) {
@@ -54,7 +57,7 @@ final class MetricsIngestService
                     $this->metrics->upsert($sourceId, $dto);
 
                     $ok++;
-                    $items[] = ['i'=>$i,'status'=>'ok','source_video_id'=>$sourceId,'snapshot_at'=>$dto->snapshot_atUtc];
+                    $items[] = ['i'=>$i,'status'=>'ok','source_video_id'=>$sourceId,'snapshot_at'=>$dto->snapshot_atIso];
                 } catch (\Throwable $e) {
                     $ko++;
                     $items[] = ['i'=>$i,'status'=>'error','message'=>$e->getMessage()];

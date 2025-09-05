@@ -49,7 +49,7 @@ final class MetricsSnapshotRepository
         $st = $this->pdo()->prepare($sql);
         $st->execute([
             $sourceId,
-            $m->snapshot_atUtc,
+            $m->snapshot_atIso,
 
             $m->views_native,
             $m->avg_watch_seconds,
