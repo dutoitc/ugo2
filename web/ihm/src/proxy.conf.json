@@ -1,0 +1,7 @@
+{
+  "/api": {
+    "target": "https://ugo2.capstv.ch",
+    "secure": false,
+    "changeOrigin": true
+  }
+}

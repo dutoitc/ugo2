@@ -15,10 +15,15 @@ RewriteCond %{REQUEST_URI} !^/api/
 RewriteCond %{DOCUMENT_ROOT}/src/front/$1 -f
 RewriteRule ^(.+\.\w+)$ src/front/$1 [END]
 
+# 2b) FICHIERS ANGULAR DANS /browser (ex: /main-*.js, /styles-*.css, /favicon.ico, *.map)
+RewriteCond %{REQUEST_URI} !^/api/
+RewriteCond %{DOCUMENT_ROOT}/src/front/browser/$1 -f
+RewriteRule ^(.+\.\w+)$ src/front/browser/$1 [END]
+
 # 3) DOSSIERS EXISTANTS (ex: /assets/)
 RewriteCond %{REQUEST_URI} !^/api/
-RewriteCond %{DOCUMENT_ROOT}/src/front/$1 -d
-RewriteRule ^(.+)$ src/front/$1 [END]
+RewriteCond %{DOCUMENT_ROOT}/src/front/browser/$1 -d
+RewriteRule ^(.+)$ src/front/browser/$1 [END]
 
 # 4) Fallback SPA -> index.html
-RewriteRule ^ src/front/index.html [END]
+RewriteRule ^ src/front/browser/index.html [END]
