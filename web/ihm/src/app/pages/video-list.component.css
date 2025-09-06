@@ -1,0 +1,12 @@
+.search input{
+  width:100%;
+  padding:6px 8px;
+  border:1px solid var(--ugo-border);
+  border-radius:8px;
+}
+
+.col-date{ width: 10%; }
+.col-title{ width: 40%; }
+.col-small{ width: 10%; }
+
+/* La largeur 80% et le responsive sont gérés par .table--wide dans styles.css */

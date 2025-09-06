@@ -1,0 +1,41 @@
+<h1>Vidéos</h1>
+
+<div class="card search wide">
+  <label>
+    <span class="meta">Recherche</span>
+    <input
+      type="search"
+      #qbox
+      [value]="q()"
+      (input)="onQ(qbox.value)"
+      placeholder="Titre, description…"
+    />
+  </label>
+</div>
+
+<table class="table wide">
+  <thead>
+  <tr>
+    <th class="col-date">Date</th>
+    <th class="col-title">Titre</th>
+    <th class="col-small">YouTube</th>
+    <th class="col-small">Facebook</th>
+    <th class="col-small">Instagram</th>
+    <th class="col-small">Total</th>
+    <th class="col-small">Dernière mesure</th>
+  </tr>
+  </thead>
+  <tbody>
+  <tr *ngFor="let v of items()">
+    <td class="col-date">{{ toLocalDate(v.published_at) }}</td>
+    <td class="col-title">
+      <a [routerLink]="['/v', v.id]">{{ v.title || '(sans titre)' }}</a>
+    </td>
+    <td class="col-small">{{ fmtInt(getPlat(v, 'YOUTUBE')) }}</td>
+    <td class="col-small">{{ fmtInt(getPlat(v, 'FACEBOOK')) }}</td>
+    <td class="col-small">{{ fmtInt(getPlat(v, 'INSTAGRAM')) }}</td>
+    <td class="col-small">{{ fmtInt(totalPlat(v)) }}</td>
+    <td class="col-small">{{ toLocal(v.last_snapshot_at) }}</td>
+  </tr>
+  </tbody>
+</table>

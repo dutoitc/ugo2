@@ -98,12 +98,19 @@ final class VideosController
         $total = (int)$stCount->fetchColumn();
 
         // Page (tout en positionnel: LIMIT ? OFFSET ?)
+        // Ajout MINIMAL: calcul de last_snapshot_at via sous-requête corrélée
         $sql = "
             SELECT
               v.video_id, v.slug, v.video_title, v.video_published_at, v.canonical_length_seconds,
               v.views_native_sum, v.likes_sum, v.comments_sum, v.shares_sum,
               v.total_watch_seconds_sum, v.avg_watch_ratio_est, v.watch_equivalent_sum, v.engagement_rate_sum,
-              v.views_yt, v.views_fb, v.views_ig, v.views_tt
+              v.views_yt, v.views_fb, v.views_ig, v.views_tt,
+              (
+                SELECT MAX(ms.created_at)
+                FROM source_video sv2
+                JOIN metric_snapshot ms ON ms.source_video_id = sv2.id
+                WHERE sv2.video_id = v.video_id
+              ) AS last_snapshot_at
             FROM v_video_latest_rollup v
             $whereSql
             ORDER BY $orderBy
@@ -137,7 +144,10 @@ final class VideosController
                     'FACEBOOK' => $row['views_fb'] !== null ? (int)$row['views_fb'] : 0,
                     'INSTAGRAM'=> $row['views_ig'] !== null ? (int)$row['views_ig'] : 0,
                     'TIKTOK'   => $row['views_tt'] !== null ? (int)$row['views_tt'] : 0,
-                ]
+                ],
+
+                // Ajout minimal requis par l’IHM Étape 2
+                'last_snapshot_at' => $row['last_snapshot_at'],
             ];
         }
 
@@ -148,7 +158,6 @@ final class VideosController
             'items' => $items
         ], 200);
     }
-
 
     /**
      * GET /api/v1/video

@@ -1,125 +1,76 @@
 :root{
-  /* couleurs CAPStv */
   --ugo-blue-600:#0B76C5;
   --ugo-blue-500:#109FE3;
   --ugo-blue-300:#39C3FF;
   --ugo-blue-100:#E6F6FF;
-
-  /* neutres (LIGHT) */
-  --ugo-surface: #F5F7FA;      /* fond page */
-  --ugo-surface-2: #EEF2F7;    /* zebra clair */
-  --ugo-surface-3: #E6ECF4;    /* hover clair */
-  --ugo-card: #FFFFFF;         /* surface table */
-  --ugo-border: rgba(0,0,0,.12);
-  --ugo-border-strong: rgba(0,0,0,.18);
-  --ugo-text: #1B1F23;
-  --ugo-text-muted:#5A6B82;
+  --ugo-blue-050:#F5FBFF; /* léger pour zebra */
+  --ugo-dark-800:#0E2233;
+  --ugo-gray-100:#F5F7FA;
+  --ugo-border:#dfe3e6;
 }
-html,body{height:100%;}
+
+/* mode clair forcé */
+@media (prefers-color-scheme: dark){ :root{} }
+
+html,body{height:100%}
 body{
   margin:0;
-  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-  font-size: 15px;
-  line-height: 1.5;
-  background: var(--ugo-surface);
-  color: var(--ugo-text);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,'Helvetica Neue',Arial,'Noto Sans',sans-serif;
+  background:#fff; color:#111;
 }
 
-
-/* --- header topbar --- */
-.ugo-header{
-  height:56px; display:flex; align-items:center; gap:12px;
-  padding:0 16px;
-  background: linear-gradient(90deg, var(--ugo-blue-600), var(--ugo-blue-300));
-  color:#fff; box-shadow:0 2px 8px rgba(0,0,0,.08);
+.topbar{
+  height:56px; display:flex; align-items:center; justify-content:space-between;
+  padding:0 16px; background:linear-gradient(90deg,var(--ugo-blue-600),var(--ugo-blue-500)); color:#fff;
 }
-.ugo-topbar{ position: sticky; top:0; z-index:10; }
-.ugo-logo{ height:28px; width:auto; }
-.ugo-title{ font-weight:700; letter-spacing:.3px; }
+.topbar .brand a{ color:#fff; font-weight:700; text-decoration:none }
+.topbar .nav a{ color:#fff; text-decoration:none; margin-left:12px; opacity:.9 }
+.topbar .nav a:hover{ opacity:1 }
 
-/* menu horizontal */
-.ugo-menu{ margin-left:auto; display:flex; gap:8px; }
-.ugo-menu a{ text-decoration:none; color:#fff; padding:8px 10px; border-radius:8px; }
-.ugo-menu a.active, .ugo-menu a:hover{ background: rgba(255,255,255,.15); }
+/* conteneur IHM plein écran; les composants gèrent leur propre largeur */
+#app{ width:100%; margin:20px auto; padding:0 12px }
 
+h1{ font-size:20px; margin:12px 0 8px }
 
-/* conteneur page */
-.app-main{
-  width: 80vw;
-  max-width: none;
-  margin: 1.2rem auto 2rem;
-  padding: 0 1rem;
+.card{
+  border:1px solid var(--ugo-border); border-radius:12px; padding:12px; background:#fff;
+  box-shadow:0 1px 2px rgba(0,0,0,.04);
 }
-@media (max-width: 900px){
-  .app-main{ width:100%; padding:0 .75rem; }
+.card h2{ font-size:18px; margin:0 0 4px }
+.meta{ font-size:12px; color:#555 }
+
+.button{
+  display:inline-block; border:1px solid var(--ugo-blue-500); background:transparent; color:var(--ugo-blue-600);
+  border-radius:8px; padding:6px 10px; cursor:pointer; text-decoration:none;
 }
+.button:hover{ background:var(--ugo-blue-100) }
 
-
-
-/* contenu */
-
-
-.nav a{
-  display:block; padding:10px 12px; border-radius:8px; color:#123;
-  text-decoration:none; margin:.25rem 0;
+/* table générique; largeur gérée dans les composants via .table--wide */
+.table{
+  border-collapse:separate; border-spacing:0; background:#fff; border:1px solid var(--ugo-border);
+  border-radius:10px; overflow:hidden;
 }
-.nav a.active, .nav a:hover{
-  background: var(--ugo-blue-100);
-  color: var(--ugo-blue-600);
+.table th, .table td{
+  padding:10px 12px; vertical-align:top; border-bottom:1px solid var(--ugo-border); border-right:1px solid var(--ugo-border);
 }
-
-
-
-
-@media (prefers-color-scheme: dark){
-  :root{
-    --ugo-surface: #182230;     /* fond page */
-    --ugo-surface-2: #1E2A3A;   /* zebra */
-    --ugo-surface-3: #243247;   /* hover */
-    --ugo-card: #161D26;        /* surface table */
-    --ugo-border: rgba(255,255,255,.12);
-    --ugo-border-strong: rgba(255,255,255,.18);
-    --ugo-text: #E8EEF7;
-    --ugo-text-muted:#A7B6CE;
-  }
+.table th:last-child, .table td:last-child{ border-right:0 }
+.table tr:last-child td{ border-bottom:0 }
+.table thead th{
+  background:var(--ugo-blue-100); text-align:left; font-weight:600;
 }
+.table tbody tr:nth-child(odd){ background:#fff; }
+.table tbody tr:nth-child(even){ background:var(--ugo-blue-050); }
+.table tbody tr:hover{ background:rgba(16,159,227,0.12); }
 
+/* colonnes utilitaires */
+.col-date{ white-space:nowrap; }
+.col-title{}
 
-/* responsive sidebar */
-@media (max-width: 960px){
-  .ugo-shell{ grid-template-columns: 1fr; }
-  .ugo-aside{ display:none; }
-}
-.badge{display:inline-block; padding:2px 8px; border-radius:999px; background:#e8eef5; font-size:.8rem;}
-
-
-
-/* Smartphone / petites largeurs */
-@media (max-width: 900px) {
-  .app-main {
-    width: 100%;
-    max-width: none;
-    padding: 0 .75rem;
-    margin: .8rem auto 1.4rem;
-  }
-}
-
-
-/* === FORCE LIGHT MODE (même si l'OS est en sombre) === */
-:root { color-scheme: light; }
-
-@media (prefers-color-scheme: dark){
-  /* re-déclare les variables "light" pour écraser le thème sombre */
-  :root{
-    --ugo-surface: #F5F7FA;
-    --ugo-surface-2: #EEF2F7;
-    --ugo-surface-3: #E6ECF4;
-    --ugo-card: #FFFFFF;
-    --ugo-border: rgba(0,0,0,.12);
-    --ugo-border-strong: rgba(0,0,0,.18);
-    --ugo-text: #1B1F23;
-    --ugo-text-muted:#5A6B82;
-  }
+/* largeur responsive “80% écran” centrée, et compacte sur mobile */
+.table--wide{ width:80vw; margin:0 auto; }
+.wide{ width:80vw; margin:0 auto; }
+@media (max-width: 640px){
+  .table--wide{ width:96vw; }
+  .wide{ width:96vw; }
+  .table th, .table td{ padding:8px 10px; }
 }

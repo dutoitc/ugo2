@@ -12,3 +12,8 @@ CREATE INDEX `idx_ms_source_time`      ON `metric_snapshot` (`source_video_id`,`
 CREATE INDEX `idx_ms_snapshot_at`      ON `metric_snapshot` (`snapshot_at`);
 CREATE INDEX `idx_ms_views_native`     ON `metric_snapshot` (`views_native`);
 
+-- accélère les recherches par vidéo + dernier snapshot
+CREATE INDEX IF NOT EXISTS idx_ms_vid_snap ON metric_snapshot (source_video_id, snapshot_at DESC);
+
+-- utile pour filtres/agrèges par plateforme
+CREATE INDEX IF NOT EXISTS idx_sv_video_platform ON source_video (video_id, platform);

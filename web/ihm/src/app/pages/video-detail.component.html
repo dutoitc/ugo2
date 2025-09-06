@@ -1,0 +1,53 @@
+<a routerLink="/" class="button back">← Retour</a>
+
+<ng-container *ngIf="data(); else loading">
+  <div class="card">
+    <h2>{{ data()!.video.title || '(sans titre)' }}</h2>
+    <div class="meta">
+      publié: {{ toLocal(data()!.video.published_at) }}
+      • dernière mesure: {{ toLocal(data()!.video.last_snapshot_at) }}
+    </div>
+  </div>
+
+  <div class="card kpi">
+    <div> YouTube: {{ fmtInt(getPlat('YOUTUBE')) }} </div>
+    <div> Facebook: {{ fmtInt(getPlat('FACEBOOK')) }} </div>
+    <div> Instagram: {{ fmtInt(getPlat('INSTAGRAM')) }} </div>
+    <div> Total: {{ fmtInt(totalPlat()) }} </div>
+  </div>
+
+  <table class="table table--wide">
+    <thead>
+    <tr>
+      <th class="col-title">Source</th>
+      <th class="col-small">Dernière mesure</th>
+      <th class="col-small">Vues</th>
+      <th class="col-small">Avg watch (s)</th>
+      <th class="col-small">Like</th>
+      <th class="col-small">Love</th>
+      <th class="col-small">Wow</th>
+      <th class="col-small">Haha</th>
+      <th class="col-small">Sad</th>
+      <th class="col-small">Angry</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr *ngFor="let s of data()!.sources">
+      <td class="col-title">{{ s.platform }} · {{ s.platform_video_id || s.source_video_id }}</td>
+      <td class="col-small">{{ toLocal(s.last_snapshot_at) }}</td>
+      <td class="col-small">{{ fmtInt(s.views_native) }}</td>
+      <td class="col-small">{{ fmtInt(s.avg_watch_seconds) }}</td>
+      <td class="col-small">{{ fmtInt(s.reactions?.like) }}</td>
+      <td class="col-small">{{ fmtInt(s.reactions?.love) }}</td>
+      <td class="col-small">{{ fmtInt(s.reactions?.wow) }}</td>
+      <td class="col-small">{{ fmtInt(s.reactions?.haha) }}</td>
+      <td class="col-small">{{ fmtInt(s.reactions?.sad) }}</td>
+      <td class="col-small">{{ fmtInt(s.reactions?.angry) }}</td>
+    </tr>
+    </tbody>
+  </table>
+</ng-container>
+
+<ng-template #loading>
+  <div class="card">Chargement…</div>
+</ng-template>

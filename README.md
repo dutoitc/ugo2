@@ -64,18 +64,5 @@
 ```bash
 mvn -q -DskipTests package
 # exemples CLI (squelette)
-java -jar target/ugo2-0.2.0-SNAPSHOT.jar import:init --modes=both
-java -jar target/ugo2-0.2.0-SNAPSHOT.jar update --profile=J0 --mode=stats --since=2025-08-01
+java -jar target/ugo2-0.2.0-SNAPSHOT.jar batch:run
 ```
-
-## Contribution
-- **Conventional Commits** (`feat:`, `fix:`, `docs:`, `chore:`…)
-- Chaque PR met à jour **README**, **REQUIREMENTS**, **TODO**, **CHANGELOG**.
-
-## Licence
-- Recommandation : **AGPL-3.0-or-later** (copyleft fort côté réseau/SaaS).
-- À confirmer : GPL/AGPL autorisent l’usage commercial (vente incluse).
-
-## Statut
-- PR #1 : **documentation uniquement**.
-- PR #2 : **squelette Spring Boot + Flyway + CLI + config binding**.

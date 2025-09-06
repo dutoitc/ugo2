@@ -12,7 +12,7 @@
   * Angular app, routing, thème bleu, layout header/sidebar.
   * Healthcheck appel `/api/health` et affichage basic.
 
-- [ ] Étape 1 — Dashboard principal (liste)**
+- [x] Étape 1 — Dashboard principal (liste)**
   * `GET /videos` (mock → réel) avec colonnes FB/YT/IG/WP, Total, Type, Dernière mesure.
   * Tri/filtre basiques, pagination server-side.
   * Badge étoiles (calcul front provisoire: delta24h via endpoint additionnel ou désactivé si absent).
