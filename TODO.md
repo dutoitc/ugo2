@@ -1,32 +1,58 @@
 # TODO / Roadmap
 
-## Sprint 1  Docs & bootstrap (done)
-- [x] README (FR), REQUIREMENTS (EN), SCHEDULING, CONFIGURATION, TODO, CHANGELOG.
-- [x] Decide license (AGPL-3.0-or-later recommended). *(TBD to apply in repo)*
-- [ ] Add issue templates (bug/feature) and PR template.
+## IHM
 
-## Sprint 2  Skeleton & config wiring (this PR)
-- [x] Maven + Spring Boot 3.3 skeleton (no business logic).
-- [x] Spring Data JDBC baseline.
-- [x] Flyway bootstrap with baseline-on-migrate.
-- [x] CLI stub (`import:init`, `update --profile`, `--mode=discover|stats|both`).
-- [x] Properties binding for thresholds (delta, milestones, stars).
+
+## 8) Checklist de réalisation — étapes déployables
+> Chaque étape produit une version utilisable, commitable et déployable.
+
+- [ ] Étape 0 — Scaffolding & thème**
+  * Angular app, routing, thème bleu, layout header/sidebar.
+  * Healthcheck appel `/api/health` et affichage basic.
+
+- [ ] Étape 1 — Dashboard principal (liste)**
+  * `GET /videos` (mock → réel) avec colonnes FB/YT/IG/WP, Total, Type, Dernière mesure.
+  * Tri/filtre basiques, pagination server-side.
+  * Badge étoiles (calcul front provisoire: delta24h via endpoint additionnel ou désactivé si absent).
+
+- [ ] Étape 2 — Détail vidéo**
+  * `GET /videos/{id}` + séries `GET /videos/{id}/metrics` (72h + lifetime).
+  * Graphes ECharts (1h / 1d), cartes par source, table “dernières métriques”.
+
+- [ ] Étape 3 — Overview/KPIs**
+  * `GET /overview` tuiles par source + mini-sparklines 30j.
+
+- [ ] Étape 4 — Engagement détaillé**
+  * `/engagement` table large (dense), colonnes par source + total engagement, colonnes gelées.
+
+- [ ] Étape 5 — Alerts & Trends**
+  * `GET /alerts` (back calcule delta24h/pct par source). Top list ★/★★ avec filtres.
+  * Étoiles actives aussi sur dashboard principal (réutilise même calcul/règles).
+
+- [ ] Étape 6 — Comparateur & baselines**
+  * `/compare` avec sélection 2–3 vidéos, alignement publication, baseline `GET /metrics/baseline`.
+  
+- [ ] Étape 7 — Explorateur de métriques**
+  * `/metrics:explore` table brute filtrable.
+
+- [ ] Étape 8 — Santé des collectes**
+  * `/health` enrichi (par source). UI feux (vert/orange/rouge).
+
+- [ ] Étape 9 — Finitions responsive & perf**
+  * Column chooser, sticky headers, virtual scroll si besoin, caches TTL.
+
+- [ ] Étape 10 — Stabilisation & doc**
+  * README front, scripts build/deploy, matrices de test.
+
+
+
+## Next
 - [ ] Add CI (GitHub Actions) build (compile + unit tests).
 - [ ] Provide Dockerfile + minimal docker-compose (DB + app).
-
-## Sprint 3  Ingestion (APIs) & reconciliation
-- [ ] FB v23 discovery (posts?videos), insights (3s), engagement in compact calls.
-- [ ] YT search/videos minimal fields, ETag handling.
 - [ ] IG media (videos/Reels only), insights.
 - [ ] WP posts (reference only).
-- [ ] Reconcile service (fuzzy + heuristics), overrides format.
-
-## Sprint 4  UI PHP & observability
 - [ ] PHP admin/public pages (lists, aggregates, map v1).
 - [ ] Alerts email (milestones, stale stats, tokens).
-- [ ] Prometheus metrics, logs JSON.
 - [ ] Exports CSV/JSON.
-
-## Governance
-- Conventional Commits; update README/REQUIREMENTS/TODO/CHANGELOG each PR.
-
+- [ ] Heatmap by hours/days
+- [ ] Reconciliation admin
