@@ -361,14 +361,89 @@
 
 ## 3) Technologies retenues
 
-* **Angular 20** (standalone components, Signals) — tu connais Angular; choisir la version **stable actuelle**.
-* **AG Grid Community** pour les tableaux lourds (dashboard principal & engagement). Alternatives: Angular Material Table + CDK si on veut 100% first-party.
-* **ngx-echarts (Apache ECharts)** pour les graphes (zoom, tooltips, séries multiples, perfs OK).
-* **Luxon** pour dates + TZ **Europe/Zurich** (conversion affichage).
-* **SCSS** + variables CSS (thème bleu du logo). Pas de Bootstrap nécessaire.
-* **HttpClient** (interceptor) + petits services de cache mémoire (TTL 60–120s si besoin).
 
-> *Remarque version*: privilégier Angular 20 si elle est la version **stable** de ton environnement. Sinon, Angular 18/19 reste OK. Le code ci-dessus n’utilise pas de features “exotiques”.
+### 3.1 Choix principaux (verrouillés)
+
+* **Framework**: Angular **20.x** (standalone components, Signals, Router v20)
+* **Langage**: TypeScript **5.5+** (ES2022 target)
+* **Tables**: **AG Grid Community** (packages: `ag-grid-community`, `ag-grid-angular`) — tri/filtre/pagination server-side, colonnes gelées, densité élevée
+* **Graphiques**: **Apache ECharts** via **`ngx-echarts`** (packages: `echarts` `ngx-echarts`) — zoom, tooltips, séries multiples, bonnes perfs
+* **Dates/TZ**: **Luxon 3.x** (`luxon`) — conversion UTC → Europe/Zurich, formatage local, durations
+* **HTTP**: Angular `HttpClient` + Interceptor (headers communs, gestion erreurs)
+* **État**: **Angular Signals** (stores maison légers) + RxJS 7.8 (streams HTTP)
+* **Styles**: **SCSS** (variables + mixins). **Pas de Bootstrap**. Thème perso (bleu logo CAPStv)
+* **Icônes**: **Material Symbols** (webfont) — pas de dépendance `@angular/material` obligatoire
+* **i18n**: Angular i18n (fr par défaut), nombres via `Intl.NumberFormat`
+
+### 3.2 Outils & qualité
+
+* **CLI**: Angular CLI `@angular/cli` 20.x
+* **Lint**: ESLint 9 + `angular-eslint`
+* **Format**: Prettier 3.x
+* **Tests unitaires**: **Jest** 29.x (`jest`, `jest-preset-angular`) — plus rapide que Karma
+* **E2E**: **Playwright** 1.x (routes clés et scénarios critiques)
+* **Git hooks** (optionnel): `husky` + `lint-staged`
+
+### 3.3 Cibles & compatibilité
+
+* **Node**: 20 LTS
+* **Navigateurs**: Chrome/Edge/Firefox/Safari (2 dernières versions), iOS Safari 15+, Android Chrome 110+
+* **Rendu**: Responsive mobile-first; tables denses en desktop avec colonnes gelées
+
+### 3.4 Paquets NPM — récapitulatif
+
+| Rôle               | Package                                             | Version cible     | Remarques                   |
+| ------------------ | --------------------------------------------------- | ----------------- | --------------------------- |
+| Framework          | `@angular/core` `@angular/router` `@angular/common` | ^20.0.0           | Standalone + Signals        |
+| CLI                | `@angular/cli`                                      | ^20.0.0           | Build/serve/test            |
+| Tables             | `ag-grid-community` `ag-grid-angular`               | ^32.0.0           | Community edition           |
+| Graphes            | `echarts` `ngx-echarts`                             | ^5.5.0 / ^16.0.0  | ECharts 5 + wrapper Angular |
+| Dates              | `luxon`                                             | ^3.5.0            | TZ Europe/Zurich            |
+| Lint               | `eslint` `@angular-eslint/*`                        | ^9.0.0            | Règles Angular              |
+| Format             | `prettier`                                          | ^3.3.0            |                             |
+| Tests unitaires    | `jest` `jest-preset-angular`                        | ^29.7.0 / ^14.0.0 | Config Angular Jest         |
+| E2E                | `@playwright/test`                                  | ^1.46.0           |                             |
+| Utils (optionnels) | `zod`                                               | ^3.23.0           | Validation légère d’IO API  |
+
+### 3.5 Alternatives considérées
+
+* **Angular Material**: gardé **en réserve** (non requis). Si besoin d’un composant spécifique (dialog, menu, tooltip) non trivial, on pourra ajouter `@angular/material` ciblé (sans importer tout le design system)
+* **PrimeNG**: puissant (DataTable), mais lock-in + theming spécifique; AG Grid + SCSS suffisent ici
+* **Bootstrap**: écarté pour éviter collision CSS et dépendances inutiles
+
+### 3.6 Snippet `package.json` (extrait de base)
+
+```json
+{
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@angular/animations": "^20.0.0",
+    "@angular/common": "^20.0.0",
+    "@angular/compiler": "^20.0.0",
+    "@angular/core": "^20.0.0",
+    "@angular/forms": "^20.0.0",
+    "@angular/platform-browser": "^20.0.0",
+    "@angular/platform-browser-dynamic": "^20.0.0",
+    "@angular/router": "^20.0.0",
+    "ag-grid-angular": "^32.0.0",
+    "ag-grid-community": "^32.0.0",
+    "echarts": "^5.5.0",
+    "ngx-echarts": "^16.0.0",
+    "luxon": "^3.5.0"
+  },
+  "devDependencies": {
+    "@angular/cli": "^20.0.0",
+    "@angular-devkit/build-angular": "^20.0.0",
+    "@playwright/test": "^1.46.0",
+    "@types/jest": "^29.5.12",
+    "angular-eslint": "^19.0.0",
+    "eslint": "^9.0.0",
+    "jest": "^29.7.0",
+    "jest-preset-angular": "^14.0.0",
+    "prettier": "^3.3.0",
+    "typescript": "~5.5.0"
+  }
+}
 
 ---
 
