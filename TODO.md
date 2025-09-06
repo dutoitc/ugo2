@@ -2,11 +2,13 @@
 
 ## IHM
 
+## Notes
+- Menu en haut
 
 ## 8) Checklist de réalisation — étapes déployables
 > Chaque étape produit une version utilisable, commitable et déployable.
 
-- [ ] Étape 0 — Scaffolding & thème**
+- [x] Étape 0 — Scaffolding & thème**
   * Angular app, routing, thème bleu, layout header/sidebar.
   * Healthcheck appel `/api/health` et affichage basic.
 

@@ -1,0 +1,92 @@
+<h1>Vidéos</h1>
+
+<form class="toolbar" (submit)="$event.preventDefault()">
+  <input type="search" placeholder="Rechercher…" [(ngModel)]="q" name="q">
+  <select [(ngModel)]="platform" name="platform">
+    <option [ngValue]="undefined">Toutes plateformes</option>
+    <option value="YOUTUBE">YouTube</option>
+    <option value="FACEBOOK">Facebook</option>
+    <option value="INSTAGRAM">Instagram</option>
+    <option value="TIKTOK">TikTok</option>
+  </select>
+  <select [(ngModel)]="sort" name="sort">
+    <option value="published_desc">Tri: publié ↓</option>
+    <option value="published_asc">publié ↑</option>
+    <option value="views_desc">vues ↓</option>
+    <option value="engagement_desc">engagement ↓</option>
+    <option value="watch_eq_desc">watch eq. ↓</option>
+    <option value="title_asc">titre A→Z</option>
+    <option value="title_desc">titre Z→A</option>
+  </select>
+  <button (click)="reload()">Appliquer</button>
+</form>
+
+<p *ngIf="loading()">Chargement…</p>
+<p *ngIf="!loading() && error()" class="error">{{ error() }}</p>
+
+<div class="table-wrap" *ngIf="!loading() && rows().length; else empty">
+  <table class="ugo-table">
+    <colgroup>
+      <col class="col-date">
+      <col class="col-title">
+      <col class="col-num">   <!-- Total vues -->
+      <col class="col-num">   <!-- YT -->
+      <col class="col-num">   <!-- FB -->
+      <col class="col-num">   <!-- IG -->
+      <col class="col-num">   <!-- TT -->
+      <col class="col-num-md">/* Engagement */
+      <col class="col-num">   /* Watch Eq. */
+      <col class="col-last">  /* Dernière mesure */
+    </colgroup>
+    <thead>
+    <tr>
+      <th class="center sortable" (click)="toggleDateSort()">
+        Publié le
+        <span class="sort-caret">
+        {{ sort === 'published_desc' ? '↓' : (sort === 'published_asc' ? '↑' : '') }}
+      </span>
+      </th>
+      <th class="center">Titre</th>
+      <th class="center">Total vues</th>
+      <th class="center">YT</th>
+      <th class="center">FB</th>
+      <th class="center">IG</th>
+      <th class="center">TT</th>
+      <th class="center">Engagement</th>
+      <th class="center">Watch Eq.</th>
+      <th class="center">Dernière mesure</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr *ngFor="let v of rows()">
+      <td class="date center">{{ toZurichDate(v.published_at) }}</td>
+      <td class="title center">
+        <a [href]="'#/v/' + (v.slug || v.id)">{{ v.title }}</a>
+      </td>
+
+      <!-- numériques / % à droite -->
+      <td class="num">{{ n(v.views_native_sum ?? 0) }}</td>
+      <td class="num">{{ n(vp(v,'YOUTUBE')) }}</td>
+      <td class="num">{{ n(vp(v,'FACEBOOK')) }}</td>
+      <td class="num">{{ n(vp(v,'INSTAGRAM')) }}</td>
+      <td class="num">{{ n(vp(v,'TIKTOK')) }}</td>
+      <td class="num">
+        {{ v.engagement_rate_sum == null ? '—' : (v.engagement_rate_sum*100).toFixed(1)+'%' }}
+      </td>
+      <td class="num">{{ n(v.watch_equivalent_sum) }}</td>
+      <td class="center">—</td>
+    </tr>
+    </tbody>
+
+  </table>
+
+  <div class="pager">
+    <button [disabled]="page===1" (click)="go(page-1)">◀ Préc.</button>
+    <span>Page {{page}} / {{pages}}</span>
+    <button [disabled]="page===pages" (click)="go(page+1)">Suiv. ▶</button>
+  </div>
+</div>
+
+<ng-template #empty>
+  <p *ngIf="!loading() && !error()">Aucune vidéo.</p>
+</ng-template>

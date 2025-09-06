@@ -1,0 +1,111 @@
+/* Toolbar */
+.toolbar{ display:flex; gap:.6rem; align-items:center; margin:0 0 1rem 0; }
+
+/* Wrapper */
+.table-wrap{ overflow:auto; max-width:100%; }
+
+/* Table */
+.ugo-table{
+  width:100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--ugo-border-strong);
+  background: var(--ugo-card);
+  color: var(--ugo-text);
+  font-size: .95rem;
+}
+
+/* Cells */
+.ugo-table th, .ugo-table td{
+  padding: .95rem 1.1rem;             /* + padding */
+  border-right: 1px solid var(--ugo-border);
+  border-bottom: 1px solid var(--ugo-border);
+  text-align: center;
+  vertical-align: middle;
+}
+.ugo-table th:last-child, .ugo-table td:last-child{ border-right:0; }
+
+/* Header sticky */
+.ugo-table thead th{
+  position: sticky; top:0; z-index:1;
+  background: linear-gradient(#f7f9fc, #eef3fb);
+  font-weight:700; color:#222a35;
+  box-shadow: 0 1px 0 var(--ugo-border) inset;
+}
+@media (prefers-color-scheme: dark){
+  .ugo-table thead th{
+    background: linear-gradient(#212b38, #1b2431);
+    color:#f2f6ff;
+  }
+}
+
+/* Zebra + hover */
+.ugo-table tbody tr:nth-child(even){ background: var(--ugo-surface-2); }
+.ugo-table tbody tr:hover{ background: var(--ugo-surface-3); }
+
+/* Alignements spécifiques */
+.num{ text-align:right !important; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+.center{ text-align:center !important; }
+.date{ white-space:nowrap; }
+
+/* Titre */
+.title a{
+  display:inline-block;
+  color: var(--ugo-blue-600);
+  font-weight:500;
+  text-decoration:none;
+  max-width: 80ch;
+  text-wrap: balance;
+  letter-spacing: 0;
+}
+.title a:hover{ text-decoration:underline; }
+
+/* Sort caret */
+.sortable{ cursor:pointer; user-select:none; }
+.sort-caret{ margin-left:.25rem; opacity:.8; }
+
+/* Pager (inchangé) */
+.error{ color:#c0392b; font-weight:600; padding:.25rem 0; }
+
+/* Largeur min pour colonnes compactes (stabilité visuelle) */
+.ugo-table th:nth-child(1), .ugo-table td:nth-child(1){ width: 9.5rem; } /* date */
+.ugo-table th:nth-child(3), .ugo-table td:nth-child(3),
+.ugo-table th:nth-child(4), .ugo-table td:nth-child(4),
+.ugo-table th:nth-child(5), .ugo-table td:nth-child(5),
+.ugo-table th:nth-child(6), .ugo-table td:nth-child(6),
+.ugo-table th:nth-child(7), .ugo-table td:nth-child(7),
+.ugo-table th:nth-child(8), .ugo-table td:nth-child(8),
+.ugo-table th:nth-child(9), .ugo-table td:nth-child(9),
+.ugo-table th:nth-child(10), .ugo-table td:nth-child(10){ min-width: 5.2rem; }
+
+/* === Force LIGHT table même si l'OS est en sombre === */
+@media (prefers-color-scheme: dark){
+  .ugo-table{
+    background:#fff; color:#1b1f24; border-color: rgba(0,0,0,.18);
+  }
+  .ugo-table thead th{
+    background: linear-gradient(#f7f9fc, #eef3fb); color:#222a35;
+  }
+  .ugo-table th, .ugo-table td{
+    border-right: 1px solid rgba(0,0,0,.12);
+    border-bottom: 1px solid rgba(0,0,0,.12);
+  }
+  .ugo-table tbody tr:nth-child(even){ background:#fafbfe; }
+  .ugo-table tbody tr:hover{ background:#eaf3ff; }
+  .title a { color:#0a5bd8; }
+}
+
+/* Largeurs de colonnes (somme ~100%) */
+.ugo-table col.col-date  { width: 11%; }
+.ugo-table col.col-title { width: 42%; }
+.ugo-table col.col-num   { width: 6%;  }
+.ugo-table col.col-num-md{ width: 7%;  }
+.ugo-table col.col-last  { width: 3%;  }
+
+/* Titre : meilleure répartition & retour à la ligne harmonieux */
+.title a{
+  display:inline-block;
+  max-width: none;
+  word-break: break-word;
+  text-wrap: balance;
+}

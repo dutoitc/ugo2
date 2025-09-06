@@ -1,19 +1,32 @@
 :root{
+  /* couleurs CAPStv */
   --ugo-blue-600:#0B76C5;
   --ugo-blue-500:#109FE3;
   --ugo-blue-300:#39C3FF;
   --ugo-blue-100:#E6F6FF;
-  --ugo-dark-800:#0E2233;
-  --ugo-gray-100:#F5F7FA;
-}
 
+  /* neutres (LIGHT) */
+  --ugo-surface: #F5F7FA;      /* fond page */
+  --ugo-surface-2: #EEF2F7;    /* zebra clair */
+  --ugo-surface-3: #E6ECF4;    /* hover clair */
+  --ugo-card: #FFFFFF;         /* surface table */
+  --ugo-border: rgba(0,0,0,.12);
+  --ugo-border-strong: rgba(0,0,0,.18);
+  --ugo-text: #1B1F23;
+  --ugo-text-muted:#5A6B82;
+}
 html,body{height:100%;}
 body{
   margin:0;
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,'Helvetica Neue',Arial,'Noto Sans',sans-serif;
-  background: var(--ugo-gray-100);
-  color:#1b1f23;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  background: var(--ugo-surface);
+  color: var(--ugo-text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
+
 
 /* --- header topbar --- */
 .ugo-header{
@@ -28,15 +41,24 @@ body{
 
 /* menu horizontal */
 .ugo-menu{ margin-left:auto; display:flex; gap:8px; }
-.ugo-menu a{
-  text-decoration:none; color:#fff; padding:8px 10px; border-radius:8px;
+.ugo-menu a{ text-decoration:none; color:#fff; padding:8px 10px; border-radius:8px; }
+.ugo-menu a.active, .ugo-menu a:hover{ background: rgba(255,255,255,.15); }
+
+
+/* conteneur page */
+.app-main{
+  width: 80vw;
+  max-width: none;
+  margin: 1.2rem auto 2rem;
+  padding: 0 1rem;
 }
-.ugo-menu a.active, .ugo-menu a:hover{
-  background: rgba(255,255,255,.15);
+@media (max-width: 900px){
+  .app-main{ width:100%; padding:0 .75rem; }
 }
 
+
+
 /* contenu */
-.ugo-main{ padding:16px; max-width:1200px; margin:0 auto; }
 
 
 .nav a{
@@ -48,6 +70,23 @@ body{
   color: var(--ugo-blue-600);
 }
 
+
+
+
+@media (prefers-color-scheme: dark){
+  :root{
+    --ugo-surface: #182230;     /* fond page */
+    --ugo-surface-2: #1E2A3A;   /* zebra */
+    --ugo-surface-3: #243247;   /* hover */
+    --ugo-card: #161D26;        /* surface table */
+    --ugo-border: rgba(255,255,255,.12);
+    --ugo-border-strong: rgba(255,255,255,.18);
+    --ugo-text: #E8EEF7;
+    --ugo-text-muted:#A7B6CE;
+  }
+}
+
+
 /* responsive sidebar */
 @media (max-width: 960px){
   .ugo-shell{ grid-template-columns: 1fr; }
@@ -55,3 +94,32 @@ body{
 }
 .badge{display:inline-block; padding:2px 8px; border-radius:999px; background:#e8eef5; font-size:.8rem;}
 
+
+
+/* Smartphone / petites largeurs */
+@media (max-width: 900px) {
+  .app-main {
+    width: 100%;
+    max-width: none;
+    padding: 0 .75rem;
+    margin: .8rem auto 1.4rem;
+  }
+}
+
+
+/* === FORCE LIGHT MODE (même si l'OS est en sombre) === */
+:root { color-scheme: light; }
+
+@media (prefers-color-scheme: dark){
+  /* re-déclare les variables "light" pour écraser le thème sombre */
+  :root{
+    --ugo-surface: #F5F7FA;
+    --ugo-surface-2: #EEF2F7;
+    --ugo-surface-3: #E6ECF4;
+    --ugo-card: #FFFFFF;
+    --ugo-border: rgba(0,0,0,.12);
+    --ugo-border-strong: rgba(0,0,0,.18);
+    --ugo-text: #1B1F23;
+    --ugo-text-muted:#5A6B82;
+  }
+}

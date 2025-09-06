@@ -12,11 +12,12 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
       <nav class="ugo-menu">
         <a routerLink="" routerLinkActive="active" [routerLinkActiveOptions]="{exact:true}">Accueil</a>
+        <a routerLink="/videos" routerLinkActive="active">Vidéos</a>
         <a routerLink="/health" routerLinkActive="active">Health</a>
       </nav>
     </header>
 
-    <main class="ugo-main">
+    <main class="app-main">
       <router-outlet/>
     </main>
   `,
