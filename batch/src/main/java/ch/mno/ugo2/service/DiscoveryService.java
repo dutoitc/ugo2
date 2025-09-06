@@ -18,7 +18,7 @@ public class DiscoveryService {
   /** Retourne le nombre total de snapshots poussés (YT + FB). */
   public int discover() {
     int pushed = 0;
-    //pushed += discoverYT();
+    pushed += discoverYT();
     pushed += discoverFB();
     return pushed;
   }

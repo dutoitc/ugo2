@@ -1,169 +1,231 @@
+// batch/src/main/java/ch/mno/ugo2/facebook/FacebookCollectorService.java
 package ch.mno.ugo2.facebook;
 
 import ch.mno.ugo2.config.FacebookProps;
 import ch.mno.ugo2.dto.MetricsUpsertItem;
+import ch.mno.ugo2.dto.SourceUpsertItem;
 import ch.mno.ugo2.facebook.responses.FacebookPostsResponse;
-import ch.mno.ugo2.facebook.responses.InsightValue;
+import ch.mno.ugo2.facebook.responses.InsightMetric;
 import ch.mno.ugo2.facebook.responses.InsightsResponse;
 import ch.mno.ugo2.facebook.responses.VideoResponse;
 import ch.mno.ugo2.service.WebApiSinkService;
 import com.fasterxml.jackson.databind.JsonNode;
-import org.apache.commons.lang3.StringUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.*;
+import java.util.stream.Collectors;
 
-/**
- * Découvre les posts publiés pour chaque page configurée, extrait les IDs vidéo/reel,
- * récupère métriques (video + insights) et pousse vers l'API.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class FacebookCollectorService {
 
-    private final ch.mno.ugo2.facebook.FacebookClient fb;
+    private final FacebookClient fb;
     private final FacebookProps cfg;
     private final WebApiSinkService sink;
 
-
-    /**
-     * @return nombre de snapshots poussés
-     */
+    /** Collecte multi-pages + upsert sources + upsert metrics. */
     public int collect() {
-        List<String> pageIds = cfg.getPageIds(); // ex: app.yaml → facebook.pageIds: [123..., 456...]
-        if (pageIds == null || pageIds.isEmpty()) {
-            log.warn("[FB] aucune page configurée (facebook.pageIds vide)");
-            return 0;
-        }
-
         Set<String> allVideoIds = new LinkedHashSet<>();
-        for (String pageId : pageIds) {
+        for (String pageId : cfg.getPageIds()) {
             try {
                 allVideoIds.addAll(discoverVideoIdsForPage(pageId));
             } catch (Exception e) {
                 log.warn("[FB] page {}: {}", pageId, e.toString());
             }
         }
-
         if (allVideoIds.isEmpty()) return 0;
-        return collectAndPushByIds(new ArrayList<>(allVideoIds)).blockOptional().orElse(0);
+
+        return collectAndPushByIds(new ArrayList<>(allVideoIds))
+                .blockOptional().orElse(0);
     }
 
-    /** Collecte/pousse un lot d’IDs connus (utilitaire, utilisé par collect()). */
+    /** Collecte par IDs, prépare sources + metrics, pousse côté API de manière non bloquante. */
     public Mono<Integer> collectAndPushByIds(List<String> ids) {
         if (ids == null || ids.isEmpty()) return Mono.just(0);
 
+        final String v = cfg.getApiVersion();
+        final String token = cfg.getAccessToken();
+
         return Flux.fromIterable(ids)
-                .flatMap(this::fetchOne)           // Mono<MetricsUpsertItem>
+                .flatMap(id ->
+                                Mono.zip(
+                                                fb.video(v, id, token),
+                                                fb.insights(v, id, token)
+                                        )
+                                        .map(tuple -> {
+                                            VideoResponse video = tuple.getT1();
+                                            InsightsResponse insResp = tuple.getT2();
+
+                                            SourceUpsertItem src = FacebookMetricsMapper.toSource(video);
+                                            Map<String, Long> metricsMap = toFlatMap(insResp);
+                                            MetricsUpsertItem met = FacebookMetricsMapper.fromVideoAndInsights(video, metricsMap);
+                                            return new SrcAndMet(src, met);
+                                        })
+                                        .onErrorResume(ex -> {
+                                            log.warn("[FB] skip id={} cause={}", id, ex.toString());
+                                            return Mono.empty();
+                                        })
+                        , /*concurrency*/ 6)
                 .collectList()
-                .doOnNext(list -> {
-                    log.info("[FB] mapped {} snapshots", list.size());
-                    sink.batchUpsertMetrics(list);
-                })
-                .map(List::size);
+                .flatMap(list -> Mono.fromRunnable(() -> {
+                                    var sources  = list.stream().map(SrcAndMet::src).toList();
+                                    var snapshots= list.stream().map(SrcAndMet::met).toList();
+                                    log.info("[FB] upsert {} sources, {} metrics", sources.size(), snapshots.size());
+
+                                    // ⚠ appels bloquants → boundedElastic
+                                    sink.batchUpsertSources(sources);
+                                    sink.batchUpsertMetrics(snapshots);
+                                })
+                                .subscribeOn(Schedulers.boundedElastic())
+                )
+                .thenReturn(ids.size());
     }
 
-    /* ------------------- internals ------------------- */
-
+    /** Découverte d’IDs vidéo via /{page}/published_posts + attachments{media_type,target}. */
     private List<String> discoverVideoIdsForPage(String pageId) {
         List<String> out = new ArrayList<>();
         String after = null;
         int pages = 0;
 
+        // Fenêtre de collecte (rolling)
+        int days = cfg.getWindowDaysRolling();
+        String since = LocalDate.now(ZoneOffset.UTC).minusDays(days).atStartOfDay().toInstant(ZoneOffset.UTC).toString();
+        String until = Instant.now().toString();
+
         do {
-            var q = FacebookQuery.buildQueryPublishedPosts(cfg, pageId, after);
-            var resp = fb.get(q, FacebookPostsResponse.class).block();
-            if (resp == null) break;
+            FacebookPostsResponse resp = fb.publishedPosts(
+                    cfg.getApiVersion(), pageId, cfg.getAccessToken(),
+                    cfg.getPageSize(), after, since, until
+            ).block(); // Mono → BLOQUANT ponctuel ici OK si rare, sinon transformer en chaîne réactive complète
 
-            var data = resp.getData();
-            if (data != null) {
-                for (var post : data) {
-                    // attachments{media_type,target{id}}
-                    var attachments = post.getAttachments().getData();
-                    for (var att : attachments) {
-                        String mediaType = att.getMediaType();
-                        if (att.getTarget()==null) continue;
-                        String targetId  = att.getTarget().getId();
-                        if (StringUtils.isBlank(targetId)) continue;
+            if (resp == null || resp.getData() == null) break;
+            for (var post : resp.getData()) {
+                if (post.getAttachments() == null || post.getAttachments().getData() == null) continue;
+                for (var att : post.getAttachments().getData()) {
+                    var mediaType = att.getMediaType();
+                    var target = att.getTarget();
+                    if (target == null || StringUtils.isBlank(target.getId())) continue;
 
-                        // on garde les objets vidéo/reel uniquement
-                        if (mediaType.toLowerCase(Locale.ROOT).contains("video")) {
-                            out.add(targetId); // videoId (utilisable pour /{id} et /{id}/video_insights)
-                        }
+                    if (StringUtils.containsIgnoreCase(mediaType, "video")) {
+                        out.add(target.getId());
                     }
                 }
             }
 
-            // pagination
-            if (resp.getPaging()==null) break;
+            if (resp.getPaging() == null || resp.getPaging().getCursors() == null) break;
             String nextAfter = resp.getPaging().getCursors().getAfter();
-            after = StringUtils.isNotBlank(nextAfter)? nextAfter : null;
-
+            after = StringUtils.isNotBlank(nextAfter) ? nextAfter : null;
             pages++;
-        } while (after != null);
+        } while (after != null && out.size() < cfg.getMaxVideosPerRun());
 
-        log.info("[FB] page {} -> {} videoIds (pages={}", pageId, out.size(), pages);
-        return out;
+        log.info("[FB] page {} -> {} videoIds (pages={})", pageId, out.size(), pages);
+        return out.stream().distinct().limit(cfg.getMaxVideosPerRun()).collect(Collectors.toList());
     }
 
-    private Mono<MetricsUpsertItem> fetchOne(String id) {
-        // 1) Détails vidéo/reel (ajout product_type,is_reel pour détecter REEL vs VIDEO)
-        FacebookQuery videoQ = FacebookQuery.builder()
-                .version(cfg.getApiVersion())
-                .video(id)
-                .fields("id,permalink_url,created_time,length") // exists: length,post_views,likes,title,description,views,published,scheduled_publish_time
-                .accessToken(cfg.getAccessToken())
-                .build();
-
-        // 2) Insights (superset)
-        FacebookQuery insightsQ = FacebookQuery.buildQueryInsights(cfg, id, null); // null = all metrics
-
-        Mono<VideoResponse> videoMono    = fb.get(videoQ, VideoResponse.class);
-        Mono<InsightsResponse> insightsMono = fb.get(insightsQ, InsightsResponse.class);
-
-        return Mono.zip(videoMono, insightsMono)
-                .map(t -> {
-                    VideoResponse video = t.getT1();
-                    Map<String, Long> insights = toInsightMap(t.getT2());
-                    return FacebookMetricsMapper.fromVideoAndInsights(video, insights);
-                })
-                .onErrorResume(e -> {
-                    log.warn("[FB] {} -> {}", id, e.toString());
-                    return Mono.empty();
-                });
-    }
-
-    private Map<String, Long> toInsightMap(InsightsResponse insightsResp) {
+    /** Aplatisseur simple: InsightsResponse → Map<name, firstNumericValue>. */
+    static Map<String, Long> toFlatMap(InsightsResponse resp) {
         Map<String, Long> out = new LinkedHashMap<>();
-        if (insightsResp == null) return out;
+        if (resp == null || resp.data() == null) return out;
 
-        var data = insightsResp.data();
-        if (data == null) return out;
+        for (InsightMetric m : resp.data()) {
+            if (m.values() == null || m.values().isEmpty()) continue;
 
-        for (var metric : data) {
-            String name = metric.name();
-            if (name == null) continue;
+            JsonNode jn = m.values().get(0).value();
+            if (jn == null) continue;
 
-            Long v = extractFirstValue(metric.values());
-            if (v != null) out.put(name, v);
+            if (jn.isNumber()) {
+                // Numérique simple → on garde tel quel (Long)
+                Long v = coerceToLong(jn);
+                if (v != null) out.put(m.name(), v);
+                continue;
+            }
+
+            if (jn.isObject()) {
+                // Breakdown : ex {"like":61,"love":7} ou {"0":0.9811,"1":0.1046,...}
+                jn.fields().forEachRemaining(e -> {
+                    String subKey = normalizeKey(e.getKey());
+                    Long v = coerceToLong(e.getValue());
+                    if (v != null) out.put(m.name() + "_" + subKey, v);
+                });
+                continue;
+            }
+
+            if (jn.isArray()) {
+                // Rare mais possible : un array de numbers/objets
+                for (int i = 0; i < jn.size(); i++) {
+                    JsonNode el = jn.get(i);
+                    String idxKey = Integer.toString(i);
+
+                    if (el.isNumber()) {
+                        Long v = coerceToLong(el);
+                        if (v != null) out.put(m.name() + "_" + idxKey, v);
+                    } else if (el.isObject()) {
+                        el.fields().forEachRemaining(e -> {
+                            String subKey = idxKey + "_" + normalizeKey(e.getKey());
+                            Long v = coerceToLong(e.getValue());
+                            if (v != null) out.put(m.name() + "_" + subKey, v);
+                        });
+                    } // (autres types ignorés)
+                }
+            }
+            // autres types (boolean, text, null) ignorés
         }
         return out;
     }
 
-    private Long extractFirstValue(List<InsightValue> valuesNode) {
-        if (valuesNode == null || valuesNode.isEmpty()) return null;
-        JsonNode val = valuesNode.getFirst().value();
-        if (val == null) return null;
+// --- Helpers ---
 
-        if (val.isNumber()) return val.longValue();
-        if (val.isTextual()) {
-            try { return Long.parseLong(val.asText()); } catch (NumberFormatException ignored) {}
+    private static final int DECIMAL_SCALE = 10_000;
+
+    /** Convertit un JsonNode numérique (ou texte numérique) en Long.
+     *  - entiers: tel quel
+     *  - décimaux: arrondi(x * DECIMAL_SCALE)
+     */
+    private static Long coerceToLong(JsonNode n) {
+        try {
+            if (n == null || n.isNull()) return null;
+
+            if (n.isIntegralNumber()) {
+                return n.longValue();
+            }
+            if (n.isFloatingPointNumber()) {
+                // ex: 0.9811 → 9811 (4 décimales)
+                double d = n.doubleValue();
+                return Math.round(d * DECIMAL_SCALE);
+            }
+            if (n.isTextual()) {
+                String s = n.asText().trim();
+                if (s.isEmpty()) return null;
+                // tente entier, sinon décimal
+                if (s.matches("^-?\\d+$")) {
+                    return Long.parseLong(s);
+                }
+                if (s.matches("^-?\\d*\\.\\d+$")) {
+                    double d = Double.parseDouble(s);
+                    return Math.round(d * DECIMAL_SCALE);
+                }
+            }
+        } catch (Exception ignore) {
+            // on ignore silencieusement les valeurs non convertibles
         }
-        return null; // parfois FB renvoie un objet → on ignore
+        return null;
     }
+
+    /** Autorise chiffres/lettres/underscore uniquement. */
+    private static String normalizeKey(String k) {
+        if (k == null) return "";
+        return k.replaceAll("[^A-Za-z0-9_]", "_");
+    }
+
+    private record SrcAndMet(SourceUpsertItem src, MetricsUpsertItem met) {}
 }
