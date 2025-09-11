@@ -1,6 +1,28 @@
 .back{ margin-bottom:12px; display:inline-block; }
-.kpi > div{ margin:2px 0; }
 
-/* colonnes utilitaires */
-.col-title{}
-.col-small{}
+
+.wide{
+  width:80%;
+  margin:0 auto; /* centre horizontalement */
+}
+
+/* espacement vertical uniforme entre blocs */
+.block{ margin-top:12px; }
+
+/* KPIs en grille fluide */
+.kpi{
+  display:grid;
+  grid-template-columns: repeat(auto-fit,minmax(220px,1fr));
+  gap:8px;
+}
+
+/* centrage table + exceptions */
+.table-center th,
+.table-center td { text-align: center; }
+.left { text-align: left; }
+
+/* description multi-ligne */
+.desc{ white-space: pre-wrap; margin-top:6px; }
+
+.raw-list{ margin:6px 0 0 0; padding-left:18px; }
+.raw-list li{ margin:2px 0; }

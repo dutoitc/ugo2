@@ -1,53 +1,75 @@
 <a routerLink="/" class="button back">← Retour</a>
 
-<ng-container *ngIf="data(); else loading">
-  <div class="card">
-    <h2>{{ data()!.video.title || '(sans titre)' }}</h2>
-    <div class="meta">
-      publié: {{ toLocal(data()!.video.published_at) }}
-      • dernière mesure: {{ toLocal(data()!.video.last_snapshot_at) }}
-    </div>
+<!-- EN-TÊTE + DESCRIPTION (largeur = tableau) -->
+<div class="card wide block" *ngIf="data() as d">
+  <h2>{{ d.video.title || '(sans titre)' }}</h2>
+  <div class="meta">
+    publié: {{ toLocal(d.video.published_at) }}
   </div>
+  <p class="desc" *ngIf="d.video.description">{{ d.video.description }}</p>
+</div>
 
-  <div class="card kpi">
-    <div> YouTube: {{ fmtInt(getPlat('YOUTUBE')) }} </div>
-    <div> Facebook: {{ fmtInt(getPlat('FACEBOOK')) }} </div>
-    <div> Instagram: {{ fmtInt(getPlat('INSTAGRAM')) }} </div>
-    <div> Total: {{ fmtInt(totalPlat()) }} </div>
-  </div>
+<!-- KPIs ROLLUP (largeur = tableau) -->
+<div class="card kpi wide block" *ngIf="data() as d2">
+  <div><b>Vues (total):</b> {{ fmtInt(rollViewsSum()) }}</div>
+  <div><b>Likes:</b> {{ fmtInt(rollLikes()) }}</div>
+  <div><b>Commentaires:</b> {{ fmtInt(rollComments()) }}</div>
+  <div><b>Partages:</b> {{ fmtInt(rollShares()) }}</div>
+  <div><b>Watch total:</b> {{ fmtHMS(rollWatchSeconds()) }}</div>
+  <div><b>Taux d’engagement:</b> {{ rollEngRate() }}</div>
+</div>
 
-  <table class="table table--wide">
-    <thead>
-    <tr>
-      <th class="col-title">Source</th>
-      <th class="col-small">Dernière mesure</th>
-      <th class="col-small">Vues</th>
-      <th class="col-small">Avg watch (s)</th>
-      <th class="col-small">Like</th>
-      <th class="col-small">Love</th>
-      <th class="col-small">Wow</th>
-      <th class="col-small">Haha</th>
-      <th class="col-small">Sad</th>
-      <th class="col-small">Angry</th>
-    </tr>
-    </thead>
-    <tbody>
-    <tr *ngFor="let s of data()!.sources">
-      <td class="col-title">{{ s.platform }} · {{ s.platform_video_id || s.source_video_id }}</td>
-      <td class="col-small">{{ toLocal(s.last_snapshot_at) }}</td>
-      <td class="col-small">{{ fmtInt(s.views_native) }}</td>
-      <td class="col-small">{{ fmtInt(s.avg_watch_seconds) }}</td>
-      <td class="col-small">{{ fmtInt(s.reactions?.like) }}</td>
-      <td class="col-small">{{ fmtInt(s.reactions?.love) }}</td>
-      <td class="col-small">{{ fmtInt(s.reactions?.wow) }}</td>
-      <td class="col-small">{{ fmtInt(s.reactions?.haha) }}</td>
-      <td class="col-small">{{ fmtInt(s.reactions?.sad) }}</td>
-      <td class="col-small">{{ fmtInt(s.reactions?.angry) }}</td>
-    </tr>
-    </tbody>
-  </table>
-</ng-container>
+<!-- SOURCES / LATEST -->
+<table class="table wide table-center block" *ngIf="latestRows().length">
+  <thead>
+  <tr>
+    <th class="col-title left">Plateforme / Lien</th>
+    <th class="col-small">ID</th>
+    <th class="col-small">Snapshot</th>
+    <th class="col-small">Vues</th>
+    <th class="col-small">Likes</th>
+    <th class="col-small">Commentaires</th>
+    <th class="col-small">Shares</th>
+    <th class="col-small">Avg watch</th>
+    <th class="col-small">Watch total</th>
+    <th class="col-small">Eq. watch</th>
+    <th class="col-small">Eng. rate</th>
+  </tr>
+  </thead>
+  <tbody>
+  <tr *ngFor="let r of latestRows()">
+    <td class="col-title left">
+      {{ r.src.platform }}
+      <span *ngIf="r.l?.url">
+        • <a [href]="r.l?.url" target="_blank" rel="noopener">ouvrir</a>
+      </span>
+    </td>
+    <td class="col-small">{{ r.src.platform_video_id || r.l?.platform_video_id || '—' }}</td>
+    <td class="col-small">{{ toLocal(r.l?.snapshot_at) }}</td>
+    <td class="col-small">{{ fmtInt(r.l?.views_native) }}</td>
+    <td class="col-small">{{ fmtInt(r.l?.likes) }}</td>
+    <td class="col-small">{{ fmtInt(r.l?.comments) }}</td>
+    <td class="col-small">{{ fmtInt(r.l?.shares) }}</td>
+    <td class="col-small">{{ fmtHMS(r.l?.avg_watch_seconds) }}</td>
+    <td class="col-small">{{ fmtHMS(r.l?.total_watch_seconds) }}</td>
+    <td class="col-small">{{ fmtInt(r.l?.watch_equivalent) }}</td>
+    <td class="col-small">{{ engRateForRow(r) }}</td>
+  </tr>
+  </tbody>
+</table>
 
-<ng-template #loading>
-  <div class="card">Chargement…</div>
-</ng-template>
+<!-- RÉACTIONS (largeur = tableau) -->
+<div class="card wide block" *ngIf="latestRows().length">
+  <h3>Réactions (détail)</h3>
+  <ul class="raw-list">
+    <li *ngFor="let r of latestRows()">
+      <b>{{ r.src.platform }}</b> :
+      like={{ fmtInt(r.l?.reactions_like) }},
+      love={{ fmtInt(r.l?.reactions_love) }},
+      wow={{ fmtInt(r.l?.reactions_wow) }},
+      haha={{ fmtInt(r.l?.reactions_haha) }},
+      sad={{ fmtInt(r.l?.reactions_sad) }},
+      angry={{ fmtInt(r.l?.reactions_angry) }}
+    </li>
+  </ul>
+</div>

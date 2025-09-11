@@ -2,8 +2,10 @@
 
 ## IHM
 
-## Notes
-- Menu en haut
+## Prompt
+lit le code ci-joint. lit le todo.md et spec-ihm.md. Donne le code pour l'étape X.
+attention: donne l'intégralité des fichiers modifiés (sauf si c'est très court), et modifie le minimum pour que ça fonctionne, dans le même style que le fichier modifié.
+
 
 ## 8) Checklist de réalisation — étapes déployables
 > Chaque étape produit une version utilisable, commitable et déployable.
@@ -17,8 +19,10 @@
   * Tri/filtre basiques, pagination server-side.
   * Badge étoiles (calcul front provisoire: delta24h via endpoint additionnel ou désactivé si absent).
 
-- [ ] Étape 2 — Détail vidéo**
+- [x] Étape 2 — Détail vidéo**
   * `GET /videos/{id}` + séries `GET /videos/{id}/metrics` (72h + lifetime).
+  
+- [ ] Étape 2b
   * Graphes ECharts (1h / 1d), cartes par source, table “dernières métriques”.
 
 - [ ] Étape 3 — Overview/KPIs**
