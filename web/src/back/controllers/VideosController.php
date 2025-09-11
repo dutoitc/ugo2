@@ -24,7 +24,7 @@ final class VideosController
      * GET /api/v1/videos
      * Query params:
      *  - page (>=1, défaut 1)
-     *  - size (1..200, défaut 20)
+     *  - size (1..5000, défaut 20)
      *  - q (recherche: titre/slug, LIKE %q%)
      *  - platform (YOUTUBE|FACEBOOK|INSTAGRAM|TIKTOK) [optionnel]
      *  - format (VIDEO|SHORT|REEL) [optionnel, filtre via existence de sources correspondantes]
@@ -38,7 +38,6 @@ final class VideosController
         $page = max(1, (int)($_GET['page'] ?? 1));
         $size = (int)($_GET['size'] ?? 20);
         if ($size < 1)   $size = 20;
-        if ($size > 200) $size = 200;
         $offset = ($page - 1) * $size;
 
         $q        = isset($_GET['q']) ? trim((string)$_GET['q']) : null;
