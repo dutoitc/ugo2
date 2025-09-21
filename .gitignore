@@ -40,3 +40,8 @@ chk.php
 /batch/src/test/resources/real.properties
 /web/testui-capstv.sh
 /web/myconnectweb.sh
+t
+/web/src/back/controllers/t
+/batch/src/main/java/ch/mno/ugo2/facebook/t
+/deploy.sh
+/.idea/uiDesigner.xml
