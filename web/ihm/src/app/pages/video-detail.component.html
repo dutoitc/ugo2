@@ -15,7 +15,7 @@
   <div><b>Likes:</b> {{ fmtInt(rollLikes()) }}</div>
   <div><b>Commentaires:</b> {{ fmtInt(rollComments()) }}</div>
   <div><b>Partages:</b> {{ fmtInt(rollShares()) }}</div>
-  <div><b>Watch total:</b> {{ fmtHMS(rollWatchSeconds()) }}</div>
+  <div><b>Durée des vues, total:</b> {{ fmtHMS(rollWatchSeconds()) }}</div>
   <div><b>Taux d’engagement:</b> {{ rollEngRate() }}</div>
 </div>
 
@@ -29,11 +29,11 @@
     <th class="col-small">Vues</th>
     <th class="col-small">Likes</th>
     <th class="col-small">Commentaires</th>
-    <th class="col-small">Shares</th>
-    <th class="col-small">Avg watch</th>
-    <th class="col-small">Watch total</th>
-    <th class="col-small">Eq. watch</th>
-    <th class="col-small">Eng. rate</th>
+    <th class="col-small">Partages</th>
+    <th class="col-small">Durée de vue moyenne</th>
+    <th class="col-small">Durée de vue totale</th>
+    <th class="col-small">Durée de vue équivalente</th>
+    <th class="col-small">Taux d'engagement</th>
   </tr>
   </thead>
   <tbody>
@@ -63,13 +63,13 @@
   <h3>Réactions (détail)</h3>
   <ul class="raw-list">
     <li *ngFor="let r of latestRows()">
-      <b>{{ r.src.platform }}</b> :
-      like={{ fmtInt(r.l?.reactions_like) }},
-      love={{ fmtInt(r.l?.reactions_love) }},
-      wow={{ fmtInt(r.l?.reactions_wow) }},
-      haha={{ fmtInt(r.l?.reactions_haha) }},
-      sad={{ fmtInt(r.l?.reactions_sad) }},
-      angry={{ fmtInt(r.l?.reactions_angry) }}
+      <b>{{ r.src.platform }}</b> :<br/>
+      {{ fmtInt(r.l?.reactions_like) }} 👍 J'aime<br/>
+      {{ fmtInt(r.l?.reactions_love) }} ❤️ J'adore<br/>
+      {{ fmtInt(r.l?.reactions_wow) }} 😮 Wow<br/>
+      {{ fmtInt(r.l?.reactions_haha) }} 😂 Haha<br/>
+      {{ fmtInt(r.l?.reactions_sad) }} 😢 Triste<br/>
+      {{ fmtInt(r.l?.reactions_angry) }} 😡 Furieux
     </li>
   </ul>
 </div>
