@@ -19,7 +19,51 @@
   <div><b>Taux d’engagement:</b> {{ rollEngRate() }}</div>
 </div>
 
-<!-- SOURCES / LATEST -->
+<!-- Graphe GLOBAL (une seule série) -->
+<div class="card wide block" *ngIf="data()">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <h3 style="margin:0;">Vues dans le temps (global)</h3>
+    <div>
+      <button class="small" (click)="setGran('hour')" [class.active]="gran==='hour'">1h</button>
+      <button class="small" (click)="setGran('day')"  [class.active]="gran==='day'">1d</button>
+    </div>
+  </div>
+
+  <div id="chart" style="height:320px; width:100%; margin-top:10px;"></div>
+  <div class="small-note">
+    Les données affichées sont agrégées selon la granulométrie choisie.
+    Endpoint prioritaire : <code>/api/v1/video/{{ '{' }}id{{ '}' }}/timeseries</code>.
+  </div>
+</div>
+
+<!-- Graphes PAR PLATEFORME -->
+<div class="card wide block" *ngIf="platforms().length">
+  <h3>Vues par plateforme</h3>
+  <div class="platform-charts">
+    <div class="platform-chart" *ngFor="let p of platforms()">
+      <div class="chart-header">{{ p }}</div>
+      <div [id]="'chart-platform-'+p" style="height:280px; width:100%; margin-top:6px;"></div>
+    </div>
+  </div>
+  <div class="small-note">Chaque graphe affiche une seule plateforme.</div>
+</div>
+
+<!-- Cartes par source (placeholder simple) -->
+<div class="card wide block" *ngIf="data() as d">
+  <h3>Sources / Localisation</h3>
+  <div class="sources-row">
+    <div class="source-card" *ngFor="let s of bySource()">
+      <div class="src-title">{{ s.platform }}</div>
+      <div class="src-count">{{ fmtInt(s.views) }} vues</div>
+      <!-- mini sparklines via echarts small instances -->
+      <div class="spark" [attr.data-src]="s.platform" [id]="'spark-'+s.platform"></div>
+      <div class="src-meta">Dernier snapshot: {{ toLocal(s.last_snapshot_at) }}</div>
+    </div>
+  </div>
+  <div class="small-note">Mini-cartes / sparklines. Pour une carte géographique complète il faut enrichir la source avec lat/lon côté API.</div>
+</div>
+
+<!-- SOURCES / LATEST (NE PAS MODIFIER) -->
 <table class="table wide table-center block" *ngIf="latestRows().length">
   <thead>
   <tr>

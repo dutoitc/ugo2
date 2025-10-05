@@ -73,6 +73,16 @@ final class Router
         error_log(sprintf('[API] %s %s (CT=%s, CL=%s)', $method, $path, $ct, $cl));
 
         try {
+            // --- Route dynamique: GET /api/v1/video/{id}/timeseries ---
+            if ($method === 'GET' && preg_match('#^/api/v1/video/(\d+)/timeseries$#', $path, $m)) {
+                // On injecte l'id en query pour rester homogène avec les contrôleurs existants
+                $_GET['id'] = (int)$m[1];
+                $controller = new \Web\Controllers\VideoTimeseriesController($this->db, $this->auth);
+                $controller->timeseries();
+                return;
+            }
+
+            // --- Routes déclarées (match exact) ---
             foreach ($this->routes as [$m, $r, $handler]) {
                 if ($m === $method && $r === $path) {
                     [$class, $fn] = $handler;

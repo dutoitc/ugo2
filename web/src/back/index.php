@@ -13,6 +13,7 @@ require_once __DIR__ . '/controllers/HealthController.php';
 require_once __DIR__ . '/controllers/SourcesIngestController.php';
 require_once __DIR__ . '/controllers/MetricsIngestController.php';
 require_once __DIR__ . '/controllers/VideosController.php';
+require_once __DIR__ . '/controllers/VideoTimeseriesController.php';
 require_once __DIR__ . '/controllers/AggregatesController.php';
 require_once __DIR__ . '/controllers/ReconcileController.php';
 require_once __DIR__ . '/controllers/MetricsIngestController.php';

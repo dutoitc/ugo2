@@ -3,8 +3,11 @@
 ## IHM
 
 ## Prompt
-lit le code ci-joint. lit le todo.md et spec-ihm.md. Donne le code pour l'étape X.
-attention: donne l'intégralité des fichiers modifiés (sauf si c'est très court), et modifie le minimum pour que ça fonctionne, dans le même style que le fichier modifié.
+lit le code ci-joint. lit le todo.md et spec-ihm.md. Donne le code pour l'étape 2b.
+attention: donne l'intégralité des fichiers modifiés (sauf si c'est très court), et modifie le minimum pour que ça fonctionne, 
+dans le même style que le(s) fichier(s) modifié(s).
+Ne fait pas de refactoring ou de modification du code actuel sauf si c'est vraiment indispensable.
+Par contre, tu peux proposer des meilleures solutions à la fin. Autrement dit, d'abord on modifie. Ensuite on refactore, les 2 se font séparément.
 
 
 ## 8) Checklist de réalisation — étapes déployables
