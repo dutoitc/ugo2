@@ -1,119 +1,85 @@
 <a routerLink="/" class="button back">← Retour</a>
 
-<!-- EN-TÊTE + DESCRIPTION (largeur = tableau) -->
 <div class="card wide block" *ngIf="data() as d">
   <h2>{{ d.video.title || '(sans titre)' }}</h2>
-  <div class="meta">
-    publié: {{ toLocal(d.video.published_at) }}
-  </div>
+  <div class="meta">publié: {{ toLocal(d.video.published_at) }}</div>
   <p class="desc" *ngIf="d.video.description">{{ d.video.description }}</p>
 </div>
 
-<!-- KPIs ROLLUP (largeur = tableau) -->
 <div class="card kpi wide block" *ngIf="data() as d2">
   <div><b>Vues (total):</b> {{ fmtInt(rollViewsSum()) }}</div>
   <div><b>Likes:</b> {{ fmtInt(rollLikes()) }}</div>
   <div><b>Commentaires:</b> {{ fmtInt(rollComments()) }}</div>
   <div><b>Partages:</b> {{ fmtInt(rollShares()) }}</div>
-  <div><b>Durée des vues, total:</b> {{ fmtHMS(rollWatchSeconds()) }}</div>
+  <div><b>Durée des vues, total:</b> {{ fmtHMS(rollWatchEqSeconds()) }}</div>
   <div><b>Taux d’engagement:</b> {{ rollEngRate() }}</div>
 </div>
 
-<!-- Graphe GLOBAL (une seule série) -->
-<div class="card wide block" *ngIf="data()">
-  <div style="display:flex; justify-content:space-between; align-items:center;">
-    <h3 style="margin:0;">Vues dans le temps (global)</h3>
-    <div>
-      <button class="small" (click)="setGran('hour')" [class.active]="gran==='hour'">1h</button>
-      <button class="small" (click)="setGran('day')"  [class.active]="gran==='day'">1d</button>
-    </div>
-  </div>
-
-  <div id="chart" style="height:320px; width:100%; margin-top:10px;"></div>
-  <div class="small-note">
-    Les données affichées sont agrégées selon la granulométrie choisie.
-    Endpoint prioritaire : <code>/api/v1/video/{{ '{' }}id{{ '}' }}/timeseries</code>.
-  </div>
+<div class="card wide block">
+  <h3>Évolution des vues</h3>
+  <div id="chart-global" style="height:240px;width:100%"></div>
 </div>
 
-<!-- Graphes PAR PLATEFORME -->
-<div class="card wide block" *ngIf="platforms().length">
-  <h3>Vues par plateforme</h3>
-  <div class="platform-charts">
-    <div class="platform-chart" *ngFor="let p of platforms()">
-      <div class="chart-header">{{ p }}</div>
-      <div [id]="'chart-platform-'+p" style="height:280px; width:100%; margin-top:6px;"></div>
-    </div>
-  </div>
-  <div class="small-note">Chaque graphe affiche une seule plateforme.</div>
-</div>
-
-<!-- Cartes par source (placeholder simple) -->
-<div class="card wide block" *ngIf="data() as d">
-  <h3>Sources / Localisation</h3>
-  <div class="sources-row">
-    <div class="source-card" *ngFor="let s of bySource()">
-      <div class="src-title">{{ s.platform }}</div>
-      <div class="src-count">{{ fmtInt(s.views) }} vues</div>
-      <!-- mini sparklines via echarts small instances -->
-      <div class="spark" [attr.data-src]="s.platform" [id]="'spark-'+s.platform"></div>
-      <div class="src-meta">Dernier snapshot: {{ toLocal(s.last_snapshot_at) }}</div>
-    </div>
-  </div>
-  <div class="small-note">Mini-cartes / sparklines. Pour une carte géographique complète il faut enrichir la source avec lat/lon côté API.</div>
-</div>
-
-<!-- SOURCES / LATEST (NE PAS MODIFIER) -->
-<table class="table wide table-center block" *ngIf="latestRows().length">
-  <thead>
-  <tr>
-    <th class="col-title left">Plateforme / Lien</th>
-    <th class="col-small">ID</th>
-    <th class="col-small">Snapshot</th>
-    <th class="col-small">Vues</th>
-    <th class="col-small">Likes</th>
-    <th class="col-small">Commentaires</th>
-    <th class="col-small">Partages</th>
-    <th class="col-small">Durée de vue moyenne</th>
-    <th class="col-small">Durée de vue totale</th>
-    <th class="col-small">Durée de vue équivalente</th>
-    <th class="col-small">Taux d'engagement</th>
-  </tr>
-  </thead>
-  <tbody>
-  <tr *ngFor="let r of latestRows()">
-    <td class="col-title left">
-      {{ r.src.platform }}
-      <span *ngIf="r.l?.url">
-        • <a [href]="r.l?.url" target="_blank" rel="noopener">ouvrir</a>
-      </span>
-    </td>
-    <td class="col-small">{{ r.src.platform_video_id || r.l?.platform_video_id || '—' }}</td>
-    <td class="col-small">{{ toLocal(r.l?.snapshot_at) }}</td>
-    <td class="col-small">{{ fmtInt(r.l?.views_native) }}</td>
-    <td class="col-small">{{ fmtInt(r.l?.likes) }}</td>
-    <td class="col-small">{{ fmtInt(r.l?.comments) }}</td>
-    <td class="col-small">{{ fmtInt(r.l?.shares) }}</td>
-    <td class="col-small">{{ fmtHMS(r.l?.avg_watch_seconds) }}</td>
-    <td class="col-small">{{ fmtHMS(r.l?.total_watch_seconds) }}</td>
-    <td class="col-small">{{ fmtInt(r.l?.watch_equivalent) }}</td>
-    <td class="col-small">{{ engRateForRow(r) }}</td>
-  </tr>
-  </tbody>
-</table>
-
-<!-- RÉACTIONS (largeur = tableau) -->
 <div class="card wide block" *ngIf="latestRows().length">
+  <h3>Dernières métriques par source</h3>
+  <table class="table">
+    <thead>
+    <tr>
+      <th class="col-title left">Source</th>
+      <th class="col-small">ID</th>
+      <th class="col-small">Snapshot</th>
+      <th class="col-small">Vues</th>
+      <th class="col-small">Likes</th>
+      <th class="col-small">Com.</th>
+      <th class="col-small">Partages</th>
+      <th class="col-small">Watch eq.</th>
+      <th class="col-small">Eng. rate</th>
+      <th class="col-spark">Trend</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr *ngFor="let r of latestRows(); trackBy: trackByPlatform">
+      <td class="col-title left">
+        {{ r.src.platform }}
+        <span *ngIf="r.l?.url"> • <a [href]="normalizeUrl(r.l?.url, r.src.platform)" target="_blank" rel="noopener">ouvrir</a></span>
+      </td>
+      <td class="col-small">{{ r.src.platform_video_id || r.l?.platform_video_id || '—' }}</td>
+      <td class="col-small">{{ toLocal(r.l?.snapshot_at) }}</td>
+      <td class="col-small">{{ fmtInt(r.l?.views_native) }}</td>
+      <td class="col-small">{{ fmtInt(r.l?.likes) }}</td>
+      <td class="col-small">{{ fmtInt(r.l?.comments) }}</td>
+      <td class="col-small">{{ fmtInt(r.l?.shares) }}</td>
+      <td class="col-small">{{ fmtHMS(r.l?.watch_equivalent) }}</td>
+      <td class="col-small">{{ engRateForRow(r) }}</td>
+      <td class="col-spark">
+        <div [id]="'spark-' + r.src.platform.toUpperCase()" style="height:28px;width:160px"></div>
+      </td>
+    </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card wide block" id="charts-by-platform" *ngIf="latestRows().length">
+  <h3>Par plateforme</h3>
+  <div class="grid grid-2">
+    <div *ngFor="let r of latestRows(); trackBy: trackByPlatform" class="pane">
+      <h4>{{ r.src.platform }}</h4>
+      <div [id]="'chart-' + r.src.platform.toUpperCase()" style="height:180px;width:100%"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card wide block" *ngIf="hasAnyReactions()">
   <h3>Réactions (détail)</h3>
   <ul class="raw-list">
-    <li *ngFor="let r of latestRows()">
-      <b>{{ r.src.platform }}</b> :<br/>
-      {{ fmtInt(r.l?.reactions_like) }} 👍 J'aime<br/>
-      {{ fmtInt(r.l?.reactions_love) }} ❤️ J'adore<br/>
-      {{ fmtInt(r.l?.reactions_wow) }} 😮 Wow<br/>
-      {{ fmtInt(r.l?.reactions_haha) }} 😂 Haha<br/>
-      {{ fmtInt(r.l?.reactions_sad) }} 😢 Triste<br/>
-      {{ fmtInt(r.l?.reactions_angry) }} 😡 Furieux
+    <li *ngFor="let r of reactionsRows(); trackBy: trackByPlatform">
+      <b>{{ r.src.platform }}</b> :
+      <ng-container *ngIf="showIfPos(r.l?.reactions_like)"><br/>{{ fmtInt(r.l?.reactions_like) }} 👍 J'aime</ng-container>
+      <ng-container *ngIf="showIfPos(r.l?.reactions_love)"><br/>{{ fmtInt(r.l?.reactions_love) }} ❤️ J'adore</ng-container>
+      <ng-container *ngIf="showIfPos(r.l?.reactions_wow)"><br/>{{ fmtInt(r.l?.reactions_wow) }} 😮 Wow</ng-container>
+      <ng-container *ngIf="showIfPos(r.l?.reactions_haha)"><br/>{{ fmtInt(r.l?.reactions_haha) }} 😂 Haha</ng-container>
+      <ng-container *ngIf="showIfPos(r.l?.reactions_sad)"><br/>{{ fmtInt(r.l?.reactions_sad) }} 😢 Triste</ng-container>
+      <ng-container *ngIf="showIfPos(r.l?.reactions_angry)"><br/>{{ fmtInt(r.l?.reactions_angry) }} 😡 Furieux</ng-container>
     </li>
   </ul>
 </div>

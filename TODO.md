@@ -3,11 +3,38 @@
 ## IHM
 
 ## Prompt
-lit le code ci-joint. lit le todo.md et spec-ihm.md. Donne le code pour l'étape 2b.
-attention: donne l'intégralité des fichiers modifiés (sauf si c'est très court), et modifie le minimum pour que ça fonctionne, 
-dans le même style que le(s) fichier(s) modifié(s).
-Ne fait pas de refactoring ou de modification du code actuel sauf si c'est vraiment indispensable.
-Par contre, tu peux proposer des meilleures solutions à la fin. Autrement dit, d'abord on modifie. Ensuite on refactore, les 2 se font séparément.
+But: modifier xxx
+
+Contraintes fortes (à respecter à la lettre) :
+- Ne modifie que ce qui est nécessaire pour les opération sdemandées. Pas de refactoring ni de changements “cosmétiques” (formatage, renommages, réordonnancement) sauf si indispensable pour compiler/faire fonctionner.
+- Préserve l’ordre des imports, variables, méthodes, sections. Ne trie pas les imports. Ne change pas les guillemets, l’indentation ni les sauts de ligne.
+- N’ajoute ni ne supprime de dépendances. Ne modifie pas package.json/lock.
+- Pas de reformatage automatique (ESLint/Prettier). Pas d’espaces de fin, pas de retours chariot inutiles.
+- Garde les en-têtes/licences, les commentaires existants et le style du fichier.
+- Si une donnée de l’étape est ambiguë, prends la décision minimale et explique-la dans “Hypothèses”.
+Sortie attendue :
+- Résumé des changements (très court)
+- Liste des fichiers modifiés (chemins relatifs)
+- Hypothèses/contraintes (si nécessaire, concis)
+- Code complet de chaque fichier modifié (et uniquement ceux-là), dans des blocs code séparés, précédés du chemin exact.
+- Tests/validation manuelle (checklist très courte).
+- Améliorations possibles (optionnel, après la livraison, sans les coder maintenant).
+Important :
+- Si une compilation échoue sans un micro-fix de type/nullable/import, applique le fix minimal et documente-le en 1 ligne.
+- Pas de renvoi partiel : pour chaque fichier touché, donne l’intégralité du fichier.
+- Pas de texte avant/après le code autre que les sections 1–6.
+Format de réponse :
+### 1. Résumé
+### 2. Fichiers modifiés
+### 3. Hypothèses
+### 4. Code
+path/to/file.ext
+…contenu complet…
+### 5. Validation
+### 6. Améliorations
+
+
+
 
 
 ## 8) Checklist de réalisation — étapes déployables
