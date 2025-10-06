@@ -35,6 +35,26 @@ path/to/file.ext
 
 
 
+---------------
+TimeSeriesChartComponent (standalone, OnPush)
+
+Inputs: series (déjà normalisée en [timestampMs:number, value:number][]), height, renderer='svg'|'canvas'.
+
+Gère init/dispose/resize/ResizeObserver/re-init en interne.
+
+Réutilisé pour le graphe global et ceux “par plateforme”.
+
+SparklineComponent (standalone, OnPush)
+
+Inputs: series, width=160, height=28.
+
+Même logique ECharts mais minimaliste (axes hidden).
+
+Optionnel: MetricsTableComponent
+
+Input: rows (les latestRows()), trackBy en interne, rend le SparklineComponent dans la cellule “Trend”.
+----------------
+
 
 
 ## 8) Checklist de réalisation — étapes déployables
