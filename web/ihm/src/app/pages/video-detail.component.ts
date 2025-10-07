@@ -5,10 +5,6 @@ import { ApiService } from '../services/api.service';
 import { VideoDetailResponse } from '../models';
 import { TimeSeriesChartComponent } from '../components/time-series-chart.component';
 
-declare global {
-interface Window { echarts: any; }
-}
-
 @Component({
 standalone: true,
 selector: 'app-video-detail',
@@ -26,385 +22,279 @@ private videoId = 0;
 gran: 'hour' | 'day' = 'hour';
 private ts: any | null = null;
 
-// ECharts instances (sparklines uniquement)
-private chartGlobal: any = null;
-private chartsByPlatform: Record<string, any> = {};
-private sparkInstances: Record<string, any> = {};
+// TrackBy pour *ngFor
+trackByPlatform(index: number, item: any): string {
+  return (item?.src?.platform ?? item?.platform ?? index)?.toString();
+}
 
-// Resize observers à détacher
-private roList: Array<{ el: HTMLElement; ro: ResizeObserver }> = [];
+// Utilisé par le template (réactions)
+showIfPos(v: any): boolean {
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) && n > 0;
+}
 
-private onResize = () => {
-try {
-this.chartGlobal?.resize?.();
-      Object.values(this.chartsByPlatform).forEach(c => c?.resize?.());
-      Object.values(this.sparkInstances).forEach(c => c?.resize?.());
-} catch {}
-};
+ngOnInit(): void {
+  const id = Number(this.route.snapshot.paramMap.get('id') || 0);
+  this.videoId = Number.isFinite(id) ? id : 0;
+  console.log('[video-detail] ngOnInit videoId=', this.videoId);
 
-  ngOnInit(): void {
-    const id = Number(this.route.snapshot.paramMap.get('id') || 0);
-    this.videoId = Number.isFinite(id) ? id : 0;
+  this.api.getVideoById(this.videoId).subscribe({
+    next: (res) => {
+      this.data.set(res);
+      const sources = (res as any)?.sources || [];
+      console.log('[video-detail] getVideoById ok, sources.len=', Array.isArray(sources) ? sources.length : -1,
+                  'platforms=', Array.isArray(sources) ? sources.map((s:any)=>s.platform) : null);
+    },
+    error: (err) => console.error('[video-detail] getVideoById failed', err)
+  });
 
-    this.api.getVideoById(this.videoId).subscribe({
+  this.fetchTimeseries();
+}
+
+ngOnDestroy(): void {
+  // plus d’instances impératives à nettoyer
+}
+
+private fetchTimeseries(): void {
+  const range = this.gran === 'hour' ? '7d' : '60d';
+  console.log('[video-detail] fetchTimeseries gran=', this.gran, 'range=', range);
+  this.api.getVideoTimeseries(this.videoId, { metric: 'views_native', interval: this.gran, range })
+    .subscribe({
       next: (res) => {
-        console.log('[video-detail] getVideoById raw:', res);
-        this.data.set(res);
-        setTimeout(() => this.initCharts(), 0);
-      },
-      error: (err) => console.error('[video-detail] getVideoById failed', err)
-    });
+        const r: any = res as any;
+        this.ts = (r && typeof r === 'object' && 'timeseries' in r) ? r.timeseries : r || null;
+        const keys = this.ts ? Object.keys(this.ts) : null;
+        console.log('[video-detail] /timeseries normalized keys=', keys);
 
-    this.fetchTimeseries();
-    window.addEventListener('resize', this.onResize);
-  }
-
-  ngOnDestroy(): void {
-    window.removeEventListener('resize', this.onResize);
-    this.roList.forEach(({ ro, el }) => { try { ro.unobserve(el); ro.disconnect(); } catch {} });
-    this.roList = [];
-  }
-
-  // ================= Helpers formatting =================
-
-  private n(v: any): number {
-    if (v == null || v === '') return 0;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  fmtHMS(val: number | string | null | undefined): string {
-    const s = this.n(val);
-    if (s <= 0) return '—';
-    let t = Math.floor(s);
-    const d = Math.floor(t / 86400); t -= d * 86400;
-    const h = Math.floor(t / 3600); t -= h * 3600;
-    const m = Math.floor(t / 60); const sec = t - m * 60;
-    const pad2 = (x: number) => (x < 10 ? '0' + x : '' + x);
-    const dd = d > 0 ? `${d}j ` : '';
-    return `${dd}${h}h${pad2(m)}'${pad2(sec)}''`;
-  }
-
-  fmtInt(v: any): string {
-    const n = this.n(v);
-    return n === 0 ? '0' : n.toLocaleString('fr-CH');
-  }
-
-  fmtPct(v: any): string {
-    if (v == null || v === '') return '—';
-    const n = Number(v);
-    if (!Number.isFinite(n)) return String(v);
-    return (n * 100).toFixed(2) + ' %';
-  }
-
-  trackByPlatform = (_: number, row: any) => (row?.src?.platform || row?.platform || '');
-
-  toLocal(iso: string | null | undefined): string {
-    if (!iso || (typeof iso === 'string' && iso.startsWith('0000-'))) return '—';
-    const s = String(iso).replace(' ', 'T');
-    const d = new Date(s);
-    return isNaN(d.getTime()) ? '—' : d.toLocaleString('fr-CH', { timeZone: 'Europe/Zurich' });
-  }
-
-  // ROLLUP
-  rollViewsSum(): number { return this.n(this.data()?.rollup?.views_native_sum); }
-  rollLikes(): number { return this.n(this.data()?.rollup?.likes_sum); }
-  rollComments(): number { return this.n(this.data()?.rollup?.comments_sum); }
-  rollShares(): number { return this.n(this.data()?.rollup?.shares_sum); }
-  rollWatchSeconds(): number { return this.n(this.data()?.rollup?.total_watch_seconds_sum); }
-  rollEngRate(): string { return this.fmtPct(this.data()?.rollup?.engagement_rate_sum); }
-
-  // URL
-  normalizeUrl(url: string | null | undefined, platform?: string | null): string | null {
-    if (!url) return null;
-    if (/^https?:\/\//i.test(url)) return url;
-    const p = (platform || '').toUpperCase();
-    if (p === 'FACEBOOK' || /^\/reel\//.test(url) || /^\/videos?\/.*/.test(url) || /^\/watch/.test(url)) {
-      return 'https://www.facebook.com' + (url.startsWith('/') ? url : '/' + url);
-    }
-    return url;
-  }
-
-  // Watch eq
-  rollWatchEqSeconds(): number {
-    const srcs = this.data()?.sources ?? [];
-    let sum = 0;
-    for (const s of srcs) {
-      const l: any = (s as any)?.latest;
-      const we = l?.watch_equivalent;
-      if (we != null && we !== '') {
-        const n = Number(we);
-        if (Number.isFinite(n)) sum += n;
-      }
-    }
-    return sum > 0 ? sum : this.rollWatchSeconds();
-  }
-
-  // LATEST rows
-  latestRows() {
-    const srcs = this.data()?.sources ?? [];
-    return srcs.map(s => ({ src: s, l: (s as any)?.latest })).filter(x => !!x.l);
-  }
-
-  // Latest has reactions?
-  reactionsRows(): Array<any> {
-    return (this.latestRows() || []).filter((r: any) => {
-      const vals = [
-        r?.l?.reactions_like, r?.l?.reactions_love, r?.l?.reactions_wow,
-        r?.l?.reactions_haha, r?.l?.reactions_sad, r?.l?.reactions_angry
-      ].map((v: any) => Number(v || 0));
-      return vals.some((v: number) => Number.isFinite(v) && v > 0);
-    });
-  }
-  hasAnyReactions(): boolean { return this.reactionsRows().length > 0; }
-  showIfPos(n: any): boolean { const v = Number(n || 0); return Number.isFinite(v) && v > 0; }
-
-  engRateForRow(r: any): string {
-    const provided = r?.l?.engagement_rate;
-    if (provided != null && provided !== '') {
-      const num = Number(provided);
-      return Number.isFinite(num) ? (num * 100).toFixed(2) + ' %' : String(provided);
-    }
-    const likes = Number(r?.l?.likes || 0);
-    const comments = Number(r?.l?.comments || 0);
-    const shares = Number(r?.l?.shares || 0);
-    const views = Number(r?.l?.views_native || 0);
-    const num = views > 0 ? (likes + comments + shares) / views : 0;
-    return (num * 100).toFixed(2) + ' %';
-  }
-
-  // ================= ECharts (laissé en place, inoffensif si pas de conteneur) =================
-
-  private initCharts(): void {
-    try {
-      const ec = (window as any).echarts;
-      const elGlobal = document.getElementById('chart-global');
-      if (ec && elGlobal) {
-        this.chartGlobal = ec.init(elGlobal);
-        this.refreshGlobalChart();
-        this.observeAndResize(elGlobal, this.chartGlobal);
-      }
-      this.refreshPlatformCharts();
-      this.initSparklines(); this.refreshSparklines();
-      setTimeout(this.onResize, 0);
-    } catch (e) {
-      console.warn('ECharts init skipped', e);
-    }
-  }
-
-  private refreshGlobalChart(): void {
-    if (!this.chartGlobal || !this.ts) return;
-    const series = this.parseSeries(this.ts?.views || this.ts?.timeseries?.views || []);
-    this.chartGlobal.setOption({
-      tooltip: { trigger: 'axis' },
-      xAxis: { type: 'time' },
-      yAxis: { type: 'value', min: 'dataMin', max: 'dataMax' },
-      series: [{ type: 'line', showSymbol: false, data: series }]
-    }, true);
-    this.chartGlobal.resize();
-  }
-
-  private refreshPlatformCharts(): void {
-    const ec = (window as any).echarts;
-    if (!ec) return;
-    const rows = this.latestRows();
-    rows.forEach((r: any) => {
-      const key = (r?.src?.platform || '').toUpperCase();
-      const id = `chart-${key}`;
-      let inst = this.chartsByPlatform[key];
-      const el = document.getElementById(id) as HTMLElement | null;
-      if (!el) return;
-
-      const reinit = () => {
+        // Inspecter formes brutes
         try {
-          inst?.dispose?.();
-          inst = ec.init(el, undefined, { renderer: 'svg' });
-          this.chartsByPlatform[key] = inst!;
-          this.applySparkOption(key, inst!);
+          const dbg = (x:any) => x==null ? null : { type: typeof x, isArray: Array.isArray(x), keys: (x && typeof x==='object') ? Object.keys(x).slice(0,5) : null, sample: Array.isArray(x) ? x.slice(0,3) : null };
+          console.log('[video-detail] raw.views =', dbg(this.ts?.views));
+          console.log('[video-detail] raw.YOUTUBE =', dbg(this.ts?.YOUTUBE));
+          console.log('[video-detail] raw.FACEBOOK =', dbg(this.ts?.FACEBOOK));
         } catch {}
-      };
 
-      if (inst && inst.getDom && inst.getDom() !== el) {
-        try { inst.dispose(); } catch {}
-        inst = undefined as any;
-      }
-
-      if (!inst) {
-        inst = ec.init(el, undefined, { renderer: 'svg' });
-        this.chartsByPlatform[key] = inst;
-        this.observeAndResize(el, inst, reinit);
-      }
-      this.applySparkOption(key, inst);
+        // Longueurs finales après parsing
+        try { console.log('[video-detail] global len=', this.globalViewsSeries().length, 'first3=', this.globalViewsSeries().slice(0,3)); } catch(e){}
+        try { console.log('[video-detail] YT len=', this.platformViewsSeries('YOUTUBE').length, 'first3=', this.platformViewsSeries('YOUTUBE').slice(0,3)); } catch(e){}
+        try { console.log('[video-detail] FB len=', this.platformViewsSeries('FACEBOOK').length, 'first3=', this.platformViewsSeries('FACEBOOK').slice(0,3)); } catch(e){}
+      },
+      error: (err) => console.error('[video-detail] getVideoTimeseries failed', err)
     });
-  }
+}
 
-  private parseSeries(input: any): Array<[number, number]> {
-    const out: Array<[number, number]> = [];
-    if (!input) return out;
+// ================= Helpers & KPI =================
 
-    const pickTimeKey = (obj: any): string | null => {
-      for (const k of ['t','time','ts','timestamp','date']) if (k in (obj || {})) return k;
-      for (const k of Object.keys(obj || {})) if (/time|date/i.test(k)) return k;
-      return null;
-    };
-    const pickValueKey = (obj: any): string | null => {
-      for (const k of ['v','value','y','count','views']) if (k in (obj || {})) return k;
-      for (const k of Object.keys(obj || {})) if (/value|count|views|y/i.test(k)) return k;
-      return null;
-    };
-    const parseTs = (v: any): number | null => {
-      if (v == null) return null;
-      if (typeof v === 'number') return v > 100000000000 ? v : v * 1000;
-      const s = String(v).replace(' ', 'T');
-      const d = new Date(s);
-      const t = d.getTime();
+private n(x: any): number { const v = Number(x || 0); return Number.isFinite(v) ? v : 0; }
+
+toLocal(dt: string | null | undefined): string {
+  if (!dt) return '—';
+  try { return new Date(dt).toLocaleString('fr-CH'); } catch { return String(dt); }
+}
+
+fmtHMS(t: any): string {
+  const n = this.n(t);
+  if (!Number.isFinite(n) || n <= 0) return '0';
+  const d = Math.floor(n / 86400), h = Math.floor((n - d * 86400) / 3600);
+  const m = Math.floor((n - d * 86400 - h * 3600) / 60);
+  const s = Math.floor(n - d * 86400 - h * 3600 - m * 60);
+  const pad2 = (x: number) => (x < 10 ? '0' + x : '' + x);
+  const dd = d > 0 ? `${d}j ` : '';
+  return `${dd}${h}h${pad2(m)}'${pad2(s)}''`;
+}
+
+fmtInt(v: any): string {
+  const n = this.n(v);
+  return n === 0 ? '0' : n.toLocaleString('fr-CH');
+}
+
+fmtPct(v: any): string {
+  if (v == null || v === '') return '—';
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '—';
+  return `${(n * 100).toFixed(2)} %`;
+}
+
+latestRows(): any[] {
+  const srcs = this.data()?.sources ?? [];
+  return srcs.map((s: any) => ({ src: s, l: (s as any)?.latest })).filter(x => !!x.l);
+}
+
+reactionsRows(): Array<any> {
+  return (this.latestRows() || []).filter((r: any) => {
+    const vals = [
+      r?.l?.reactions_like, r?.l?.reactions_love, r?.l?.reactions_wow,
+      r?.l?.reactions_haha, r?.l?.reactions_sad, r?.l?.reactions_angry
+    ].map((v: any) => Number(v || 0));
+    return vals.some((v: number) => Number.isFinite(v) && v > 0);
+  });
+}
+
+hasAnyReactions(): boolean { return this.reactionsRows().length > 0; }
+
+rollViewsSum(): number {
+  const d = this.data();
+  if (!d || !Array.isArray(d.sources)) return 0;
+  return d.sources.reduce((acc: number, s: any) => acc + this.n((s.latest || {}).views_native || (s.latest || {}).views), 0);
+}
+
+rollLikes(): number {
+  const d = this.data();
+  if (!d || !Array.isArray(d.sources)) return 0;
+  return d.sources.reduce((acc: number, s: any) => acc + this.n((s.latest || {}).likes), 0);
+}
+
+rollComments(): number {
+  const d = this.data();
+  if (!d || !Array.isArray(d.sources)) return 0;
+  return d.sources.reduce((acc: number, s: any) => acc + this.n((s.latest || {}).comments), 0);
+}
+
+rollShares(): number {
+  const d = this.data();
+  if (!d || !Array.isArray(d.sources)) return 0;
+  return d.sources.reduce((acc: number, s: any) => acc + this.n((s.latest || {}).shares), 0);
+}
+
+rollWatchEqSeconds(): number {
+  const d = this.data();
+  if (!d || !Array.isArray(d.sources)) return 0;
+  return d.sources.reduce((acc: number, s: any) => acc + this.n((s.latest || {}).watch_eq_seconds), 0);
+}
+
+rollEngRate(): string {
+  const views = this.rollViewsSum();
+  const likes = this.rollLikes();
+  const comments = this.rollComments();
+  const shares = this.rollShares();
+  const den = Math.max(1, views);
+  return this.fmtPct((likes + comments + shares) / den);
+}
+
+// ================= Adaptateurs pour ngx-echarts =================
+
+private parseSeries(input: any): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  if (!input) return out;
+
+  const parseTs = (x: any): number | null => {
+    if (x == null) return null;
+    if (typeof x === 'string') {
+      const d = new Date(x); const t = d.getTime();
       return Number.isFinite(t) ? t : null;
-    };
+    }
+    const n = Number(x);
+    if (!Number.isFinite(n)) return null;
+    return n < 10_000_000_000 ? n * 1000 : n; // sec→ms auto
+  };
 
-    const items: any[] = Array.isArray(input) ? input : [];
-    for (const it of items) {
-      if (Array.isArray(it) && it.length >= 2) {
-        const t = parseTs(it[0]); const v = Number(it[1] ?? 0);
-        if (t != null && Number.isFinite(v)) out.push([t, v]);
-      } else if (it && typeof it === 'object') {
-        const tk = pickTimeKey(it); const vk = pickValueKey(it);
-        const t = tk ? parseTs((it as any)[tk]) : null; const v = Number(vk ? (it as any)[vk] : 0);
-        if (t != null && Number.isFinite(v)) out.push([t, v]);
+  const pickValueFromObj = (o: any): number | null => {
+    if (!o || typeof o !== 'object') return null;
+    const keys = ['views_native','views','value','v','val','y','sum','count'];
+    for (const k of keys) {
+      const n = Number((o as any)[k]);
+      if (Number.isFinite(n)) return n;
+    }
+    // fallback: premier champ numérisable
+    for (const k of Object.keys(o)) {
+      const n = Number((o as any)[k]);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  };
+
+  const pickTimeFromObj = (o: any): number | null => {
+    if (!o || typeof o !== 'object') return null;
+    const keys = ['time','timestamp','date','t','x','ts'];
+    for (const k of keys) {
+      if (k in o) {
+        const t = parseTs((o as any)[k]);
+        if (t != null) return t;
       }
     }
+    return null;
+  };
+
+  // 1) Si c'est (ou contient) un tableau
+  const arr = Array.isArray(input) ? input :
+              (input && typeof input === 'object' && Array.isArray(input.series)) ? input.series :
+              (input && typeof input === 'object' && Array.isArray(input.data)) ? input.data :
+              (input && typeof input === 'object' && Array.isArray(input.points)) ? input.points :
+              (input && typeof input === 'object' && Array.isArray(input.values)) ? input.values : null;
+
+  if (arr) {
+    if (arr.length) {
+      try {
+        console.log('[video-detail] parseSeries sample0=', JSON.stringify(arr[0]));
+      } catch {}
+    }
+    for (const it of arr) {
+      if (Array.isArray(it) && it.length >= 2) {
+        const tCandidate = it[0];
+        const vCandidate = it[1];
+        const t = (typeof tCandidate === 'object') ? pickTimeFromObj(tCandidate) : parseTs(tCandidate);
+        let v: number | null = null;
+        if (typeof vCandidate === 'object') v = pickValueFromObj(vCandidate);
+        else {
+          const nv = Number(vCandidate);
+          v = Number.isFinite(nv) ? nv : null;
+        }
+        if (t != null && v != null) out.push([t, v]);
+        continue;
+      }
+      if (it && typeof it === 'object') {
+        const t = pickTimeFromObj(it);
+        const v = pickValueFromObj(it);
+        if (t != null && v != null) out.push([t, v]);
+      }
+    }
+    out.sort((a,b)=>a[0]-b[0]);
     return out;
   }
 
-  private observeAndResize(el: HTMLElement, inst: any, reinit?: () => void): void {
-    const tryResize = () => { try { inst?.resize?.(); } catch {} };
-    if (el.clientWidth > 0 && el.clientHeight > 0) tryResize();
-    if ('ResizeObserver' in window) {
-      const ro = new ResizeObserver(() => {
-        if (el.clientWidth > 0 && el.clientHeight > 0) tryResize();
-        // si l'instance n'est plus attachée au bon DOM (Angular a recréé le nœud), on réinit
-        try {
-          if (inst?.getDom && inst.getDom() !== el) { inst.dispose(); reinit?.(); }
-        } catch {}
-      });
-      ro.observe(el);
-      this.roList.push({ el, ro });
+  // 2) Dictionnaire { ts => v } ou { ts => {value:...} }
+  if (input && typeof input === 'object') {
+    try { console.log('[video-detail] parseSeries dict keys.sample=', Object.keys(input).slice(0,5)); } catch {}
+    for (const k of Object.keys(input)) {
+      const t = parseTs(k);
+      const raw = (input as any)[k];
+      const v = (typeof raw === 'object') ? pickValueFromObj(raw) : (Number.isFinite(Number(raw)) ? Number(raw) : null);
+      if (t != null && v != null) out.push([t, v]);
     }
-    setTimeout(() => { tryResize(); reinit?.(); }, 150);
+    out.sort((a,b)=>a[0]-b[0]);
+    return out;
   }
 
-  private applySparkOption(key: string, inst: any): void {
-    if (!inst) return;
-    const plat = (this.ts && (this.ts[key] || this.ts?.by_platform?.[key])) || null;
-    const raw = Array.isArray(plat?.views) ? plat.views
-               : Array.isArray(plat) ? plat
-               : (this.ts?.views || this.ts?.timeseries?.views || []);
-    const series = this.parseSeries(raw);
-    inst.setOption({
-      animation: false,
-      grid: { left: 0, right: 0, top: 0, bottom: 0 },
-      xAxis: { type: 'time', show: false },
-      yAxis: { type: 'value', show: false },
-      series: [{ type: 'line', showSymbol: false, data: series }]
-    }, true, false);
-  }
+  return out;
+}
 
-  // ================= Timeseries fetch =================
 
-  private fetchTimeseries(): void {
-    const range = this.gran === 'hour' ? '7d' : '60d';
-    console.log('[video-detail] fetchTimeseries gran=', this.gran, 'range=', range);
-    this.api.getVideoTimeseries(this.videoId, { metric: 'views_native', interval: this.gran, range })
-      .subscribe({
-        next: (res) => {
-          const r: any = res as any;
-          const normalized = (r && typeof r === 'object' && 'timeseries' in r) ? r.timeseries : r || null;
-          console.log('[video-detail] /timeseries normalized keys=', normalized ? Object.keys(normalized) : null);
-          this.ts = normalized;
-          if (this.chartGlobal) this.refreshGlobalChart(); else setTimeout(() => this.initCharts(), 0);
-          this.refreshPlatformCharts();
-          this.initSparklines(); this.refreshSparklines();
-          setTimeout(this.onResize, 0);
-        },
-        error: (err) => console.error('[video-detail] getVideoTimeseries failed', err)
-      });
-  }
+globalViewsSeries(): Array<[number, number]> {
+  const raw = (this.ts?.views ?? this.ts?.timeseries?.views ?? null);
+  try {
+    console.log('[video-detail] globalViewsSeries raw type=', typeof raw, 'isArray=', Array.isArray(raw),
+      'keys=', raw && typeof raw==='object' ? Object.keys(raw).slice(0,5) : null);
+  } catch {}
+  const series = this.parseSeries(raw);
+  try { console.log('[video-detail] globalViewsSeries len=', series.length, 'first3=', series.slice(0,3)); } catch {}
+  return series;
+}
 
-  private refreshSparklines(): void {
-    (this.data()?.sources || []).forEach((s: any) => {
-      const key = (s.platform || '').toUpperCase();
-      const inst = this.sparkInstances[key];
-      if (inst) this.applySparkOption(key, inst);
-    });
-  }
+platformViewsSeries(pf: string | null | undefined): Array<[number, number]> {
+  const key = String(pf || '').toUpperCase();
+  const plat: any = (this.ts && (this.ts[key] || this.ts?.by_platform?.[key])) || null;
+  const raw: any =
+    (plat && Array.isArray(plat?.views)) ? plat.views :
+    (Array.isArray(plat)) ? plat :
+    this.ts?.views ?? this.ts?.timeseries?.views ?? null;
 
-  private initSparklines(): void {
-    const ec = (window as any).echarts;
-    if (!ec) return;
-    (this.data()?.sources || []).forEach((s: any) => {
-      const key = (s.platform || '').toUpperCase();
-      const id = `spark-${key}`;
-      let inst = this.sparkInstances[key];
-      const el = document.getElementById(id) as HTMLElement | null;
-      if (!el) return;
+  try {
+    console.log('[video-detail] platformViewsSeries key=', key, 'raw type=', typeof raw, 'isArray=', Array.isArray(raw),
+      'keys=', raw && typeof raw==='object' ? Object.keys(raw).slice(0,5) : null);
+  } catch {}
 
-      const reinit = () => {
-        try {
-          inst?.dispose?.();
-          inst = ec.init(el, undefined, { renderer: 'svg' });
-          this.sparkInstances[key] = inst!;
-          this.applySparkOption(key, inst!);
-        } catch {}
-      };
-
-      if (inst && inst.getDom && inst.getDom() !== el) {
-        try { inst.dispose(); } catch {}
-        inst = undefined as any;
-      }
-
-      if (!inst) {
-        inst = ec.init(el, undefined, { renderer: 'svg' });
-        this.sparkInstances[key] = inst;
-        this.observeAndResize(el, inst, reinit);
-      }
-    });
-  }
-
-  // ================= Table “sources latest” =================
-
-  latestTableRows(): Array<any> {
-    const rows = this.latestRows();
-    const map: Record<string, { views: number; last: string | null }> = {};
-    for (const r of rows) {
-      const p = String(r?.src?.platform || '').toUpperCase();
-      const latest: any = r?.l || {};
-      const v = Number(latest?.views_native || latest?.views || 0);
-      if (!map[p]) map[p] = { views: 0, last: null };
-      if (Number.isFinite(v)) map[p].views += v;
-      const cand: string | null = latest?.snapshot_at ? String(latest.snapshot_at) : null;
-      if (cand) {
-        const candD = new Date(cand.replace(' ', 'T')).getTime();
-        const lastD = map[p].last ? new Date(String(map[p].last).replace(' ', 'T')).getTime() : 0;
-        if (candD > lastD) map[p].last = cand;
-      }
-    }
-    return Object.keys(map).map(k => ({
-      platform: k,
-      views: map[k].views,
-      last_snapshot_at: map[k].last
-    }));
-  }
-
-  // === Adapter pour TimeSeriesChartComponent ===
-  globalViewsSeries(): Array<[number, number]> {
-    return this.parseSeries(this.ts?.views || this.ts?.timeseries?.views || []);
-  }
-
-  platformViewsSeries(pf: string | null | undefined): Array<[number, number]> {
-    const key = String(pf || '').toUpperCase();
-    const plat: any = (this.ts && (this.ts[key] || this.ts?.by_platform?.[key])) || null;
-    const raw: any = Array.isArray(plat?.views) ? plat.views
-               : Array.isArray(plat) ? plat
-               : (this.ts?.views || this.ts?.timeseries?.views || []);
-    return this.parseSeries(raw);
-  }
+  const series = this.parseSeries(raw);
+  try { console.log('[video-detail] platformViewsSeries key=', key, 'len=', series.length, 'first3=', series.slice(0,3)); } catch {}
+  return series;
+}
 }

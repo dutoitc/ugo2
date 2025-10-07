@@ -37,7 +37,12 @@
       <td>{{ fmtInt(r.l?.views_native || r.l?.views) }}</td>
       <td>{{ toLocal(r.l?.snapshot_at) }}</td>
       <td class="col-spark">
-        <div [id]="'spark-' + r.src.platform.toUpperCase()" style="height:28px;width:160px"></div>
+        <app-time-series-chart
+          [series]="platformViewsSeries(r.src.platform)"
+          [height]="28"
+          [axis]="false"
+          [renderer]="'svg'">
+        </app-time-series-chart>
       </td>
     </tr>
     </tbody>
