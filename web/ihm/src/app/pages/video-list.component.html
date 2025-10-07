@@ -52,12 +52,12 @@
       <td class="col-title left">
         <a [routerLink]="['/v', v.id]">{{ v.title || '(sans titre)' }}</a>
       </td>
-      <td class="col-small" [ngClass]="platClass(v, 'YOUTUBE')">{{ fmtInt(getPlat(v, 'YOUTUBE')) }}</td>
-      <td class="col-small" [ngClass]="platClass(v, 'FACEBOOK')">{{ fmtInt(getPlat(v, 'FACEBOOK')) }}</td>
-      <td class="col-small">{{ fmtInt(getPlat(v, 'INSTAGRAM')) }}</td>
-      <td class="col-small">{{ fmtInt(totalPlat(v)) }}</td>
-      <td class="col-small">{{ fmtInt(engagements(v)) }}</td>
-      <td class="col-small">{{ toLocal(v.last_snapshot_at) }}</td>
+      <td class="col-small" [ngClass]="platClass(v, 'YOUTUBE')">{{ getPlat(v, 'YOUTUBE') | intFr }}</td>
+      <td class="col-small" [ngClass]="platClass(v, 'FACEBOOK')">{{ getPlat(v, 'FACEBOOK') | intFr }}</td>
+      <td class="col-small">{{ getPlat(v, 'INSTAGRAM') | intFr }}</td>
+      <td class="col-small">{{ totalPlat(v) | intFr }}</td>
+      <td class="col-small">{{ engagements(v) | intFr }}</td>
+      <td class="col-small">{{ v.last_snapshot_at | localDateTime }}</td>
     </tr>
   </tbody>
 </table>

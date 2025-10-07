@@ -2,16 +2,16 @@
 
 <div class="card wide block" *ngIf="data() as d">
   <h2>{{ d.video.title || '(sans titre)' }}</h2>
-  <div class="meta">publié: {{ toLocal(d.video.published_at) }}</div>
+  <div class="meta">publié: {{ d.video.published_at | localDateTime }}</div>
   <p class="desc" *ngIf="d.video.description">{{ d.video.description }}</p>
 </div>
 
 <div class="card kpi wide block" *ngIf="data() as d2">
-  <div><b>Vues (total):</b> {{ fmtInt(rollViewsSum()) }}</div>
-  <div><b>Likes:</b> {{ fmtInt(rollLikes()) }}</div>
-  <div><b>Commentaires:</b> {{ fmtInt(rollComments()) }}</div>
-  <div><b>Partages:</b> {{ fmtInt(rollShares()) }}</div>
-  <div><b>Durée des vues, total:</b> {{ fmtHMS(rollWatchEqSeconds()) }}</div>
+  <div><b>Vues (total):</b> {{ rollViewsSum() | intFr }}</div>
+  <div><b>Likes:</b> {{ rollLikes() | intFr }}</div>
+  <div><b>Commentaires:</b> {{ rollComments() | intFr }}</div>
+  <div><b>Partages:</b> {{ rollShares() | intFr }}</div>
+  <div><b>Durée des vues, total:</b> {{ rollWatchEqSeconds() | hms }}</div>
   <div><b>Taux d’engagement:</b> {{ rollEngRate() }}</div>
 </div>
 
@@ -64,12 +64,12 @@
   <ul class="raw-list">
     <li *ngFor="let r of reactionsRows(); trackBy: trackByPlatform">
       <b>{{ r.src.platform }}</b> :
-      <ng-container *ngIf="showIfPos(r.l?.reactions_like)"><br/>{{ fmtInt(r.l?.reactions_like) }} 👍 J'aime</ng-container>
-      <ng-container *ngIf="showIfPos(r.l?.reactions_love)"><br/>{{ fmtInt(r.l?.reactions_love) }} ❤️ J'adore</ng-container>
-      <ng-container *ngIf="showIfPos(r.l?.reactions_wow)"><br/>{{ fmtInt(r.l?.reactions_wow) }} 😮 Wow</ng-container>
-      <ng-container *ngIf="showIfPos(r.l?.reactions_haha)"><br/>{{ fmtInt(r.l?.reactions_haha) }} 😂 Haha</ng-container>
-      <ng-container *ngIf="showIfPos(r.l?.reactions_sad)"><br/>{{ fmtInt(r.l?.reactions_sad) }} 😢 Triste</ng-container>
-      <ng-container *ngIf="showIfPos(r.l?.reactions_angry)"><br/>{{ fmtInt(r.l?.reactions_angry) }} 😡 Furieux</ng-container>
+      <ng-container *ngIf="showIfPos(r.l?.reactions_like)"><br/>{{ r.l?.reactions_like | intFr }} 👍 J'aime</ng-container>
+      <ng-container *ngIf="showIfPos(r.l?.reactions_love)"><br/>{{ r.l?.reactions_love | intFr }} ❤️ J'adore</ng-container>
+      <ng-container *ngIf="showIfPos(r.l?.reactions_wow)"><br/>{{ r.l?.reactions_wow | intFr }} 😮 Wow</ng-container>
+      <ng-container *ngIf="showIfPos(r.l?.reactions_haha)"><br/>{{ r.l?.reactions_haha | intFr }} 😂 Haha</ng-container>
+      <ng-container *ngIf="showIfPos(r.l?.reactions_sad)"><br/>{{ r.l?.reactions_sad | intFr }} 😢 Triste</ng-container>
+      <ng-container *ngIf="showIfPos(r.l?.reactions_angry)"><br/>{{ r.l?.reactions_angry | intFr }} 😡 Furieux</ng-container>
     </li>
   </ul>
 </div>

@@ -1,6 +1,9 @@
 import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { IntFrPipe } from '../shared/pipes/int-fr.pipe';
+import { LocalDateTimePipe } from '../shared/pipes/local-datetime.pipe';
+
 import { ApiService } from '../services/api.service';
 import { VideoListItem, VideoListResponse } from '../models';
 
@@ -8,24 +11,24 @@ type SortKey = 'published_at' | 'title' | 'yt' | 'fb' | 'ig' | 'total' | 'engage
 type SortDir = 'asc' | 'desc';
 
 @Component({
-  standalone: true,
-  selector: 'app-video-list',
-  imports: [CommonModule, RouterLink],
-  templateUrl: './video-list.component.html',
-  styleUrls: ['./video-list.component.css'],
+standalone: true,
+selector: 'app-video-list',
+imports: [CommonModule, RouterLink, IntFrPipe, LocalDateTimePipe],
+templateUrl: './video-list.component.html',
+styleUrls: ['./video-list.component.css'],
 })
 export class VideoListComponent implements OnInit {
-  private api = inject(ApiService);
+private api = inject(ApiService);
 
-  // state
-  readonly q = signal<string>('');
-  readonly rawItems = signal<VideoListItem[]>([]);
+// state
+readonly q = signal<string>('');
+readonly rawItems = signal<VideoListItem[]>([]);
 
-  // tri
-  readonly sortKey = signal<SortKey>('published_at');
-  readonly sortDir = signal<SortDir>('desc');
+// tri
+readonly sortKey = signal<SortKey>('published_at');
+readonly sortDir = signal<SortDir>('desc');
 
-  ngOnInit(): void {
+ngOnInit(): void {
     this.reload();
   }
 

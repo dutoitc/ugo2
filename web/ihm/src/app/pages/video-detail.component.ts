@@ -1,6 +1,9 @@
 import { Component, OnInit, OnDestroy, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { HmsPipe } from '../shared/pipes/hms.pipe';
+import { IntFrPipe } from '../shared/pipes/int-fr.pipe';
+import { LocalDateTimePipe } from '../shared/pipes/local-datetime.pipe';
 import { ApiService } from '../services/api.service';
 import { VideoDetailResponse } from '../models';
 import { TimeSeriesChartComponent } from '../components/time-series-chart.component';
@@ -8,7 +11,7 @@ import { TimeSeriesChartComponent } from '../components/time-series-chart.compon
 @Component({
 standalone: true,
 selector: 'app-video-detail',
-imports: [CommonModule, RouterLink, TimeSeriesChartComponent],
+imports: [CommonModule, RouterLink, TimeSeriesChartComponent, HmsPipe, IntFrPipe, LocalDateTimePipe],
 templateUrl: './video-detail.component.html',
 styleUrls: ['./video-detail.component.css'],
 })
