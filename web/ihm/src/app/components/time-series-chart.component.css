@@ -1,0 +1,12 @@
+:host {
+  display: block;
+  width: 100%;
+}
+.tsc-root {
+  width: 100%;
+  /* surtout PAS de min-height ici, sinon ça écrase [height] */
+}
+.tsc-root canvas,
+.tsc-root svg {
+  display: block; /* évite le surplus de ligne/spacing */
+}
