@@ -52,12 +52,17 @@
 <div class="card wide block" id="charts-by-platform" *ngIf="latestRows().length">
   <h3>Courbe par plateforme</h3>
   <div class="grid-2">
-    <div *ngFor="let r of latestRows(); trackBy: trackByPlatform" class="grid-item">
+    <div *ngFor="let r of latestRowsDedup; trackBy: trackByPlatform" class="grid-item">
       <h4>{{ r.src.platform }}</h4>
-      <app-time-series-chart [series]="platformViewsSeries(r.src.platform)" [height]="180" [renderer]="'svg'"></app-time-series-chart>
+      <app-time-series-chart
+        [series]="platformViewsSeries(r.src.platform)"
+        [height]="180"
+        [renderer]="'svg'">
+      </app-time-series-chart>
     </div>
   </div>
 </div>
+
 
 <div class="card wide block" *ngIf="hasAnyReactions()">
   <h3>Réactions (détail)</h3>

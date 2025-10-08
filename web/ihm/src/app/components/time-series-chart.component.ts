@@ -1,71 +1,60 @@
-import { Component, Input, OnChanges, SimpleChanges, ChangeDetectionStrategy } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { NgxEchartsDirective, provideEcharts } from 'ngx-echarts';
+import { Component, ElementRef, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, ViewChild } from '@angular/core';
+import * as echarts from 'echarts';
+import type { ECharts, EChartsCoreOption as EChartsOption } from 'echarts';
+import { buildLine } from '../shared/charts/chart-options.factory';
 
 @Component({
-standalone: true,
 selector: 'app-time-series-chart',
-imports: [CommonModule, NgxEchartsDirective],
+standalone: true,
 template: `
-<div echarts
-[options]="opts"
-[initOpts]="{ renderer: renderer }"
-[autoResize]="true"
-[style.height.px]="height"></div>
+<div #chartRef [style.height.px]="height" style="width: 100%;"></div>
 `,
-styles: [`
-:host { display:block; }
-`],
-changeDetection: ChangeDetectionStrategy.OnPush,
-providers: [provideEcharts()]
 })
-export class TimeSeriesChartComponent implements OnChanges {
-  @Input() series: Array<[number, number]> = [];
-  @Input() height: number = 180;
-  @Input() renderer: 'svg' | 'canvas' = 'svg';
-  @Input() axis: boolean = true; // input pour masquer les axes en sparkline
+export class TimeSeriesChartComponent implements OnInit, OnChanges, OnDestroy {
+/** Paires [timestampMs, value] */
+@Input({ required: true }) series: [number, number][] = [];
+/** Hauteur en pixels du conteneur */
+@Input() height = 220;
+/** Affichage des axes */
+@Input() axis = true;
+/** Renderer ECharts ('canvas' | 'svg') */
+@Input() renderer: 'canvas' | 'svg' = 'canvas';
 
-  opts: any = this.buildOpts([]);
+@ViewChild('chartRef', { static: true }) private chartEl!: ElementRef<HTMLDivElement>;
 
-  ngOnChanges(changes: SimpleChanges): void {
-    try {
-      const len = Array.isArray(this.series) ? this.series.length : -1;
-      console.log('[TimeSeriesChartComponent] ngOnChanges axis=', this.axis, 'height=', this.height, 'renderer=', this.renderer, 'series.len=', len);
-      if (len > 0) console.log('[TimeSeriesChartComponent] first3=', this.series.slice(0, 3));
-    } catch {}
-    this.opts = this.buildOpts(this.series || []);
+private chart?: ECharts;
+private resizeObs?: ResizeObserver;
+
+ngOnInit(): void {
+    this.chart = echarts.init(this.chartEl.nativeElement, undefined, { renderer: this.renderer });
+    this.applyOptions();
+
+    // Responsive sans ngx-echarts
+    this.resizeObs = new ResizeObserver(() => {
+      this.chart?.resize();
+    });
+    this.resizeObs.observe(this.chartEl.nativeElement);
   }
 
-  private buildOpts(series: Array<[number, number]>): any {
-    try {
-      console.log('[TimeSeriesChartComponent] buildOpts axis=', this.axis, 'height=', this.height, 'series.len=', series?.length ?? -1);
-    } catch {}
-    return {
-      animation: false,
-      grid: (this.axis ? { left: 42, right: 8, top: 8, bottom: 26 } : { left: 0, right: 0, top: 0, bottom: 0 }),
-      tooltip: { trigger: 'axis' },
-      xAxis: {
-        type: 'time',
-        boundaryGap: false,
-        axisLabel: (this.axis ? { hideOverlap: true } : { show: false }),
-        axisLine: { show: this.axis },
-        axisTick: { show: this.axis },
-        splitLine: { show: false }
-      },
-      yAxis: {
-        type: 'value',
-        min: 'dataMin',
-        max: 'dataMax',
-        axisLabel: (this.axis ? { formatter: (v: number) => Math.round(v).toLocaleString('fr-CH') } : { show: false }),
-        axisLine: { show: this.axis },
-        axisTick: { show: this.axis },
-        splitLine: { show: false }
-      },
-      series: [{
-        type: 'line',
-        showSymbol: false,
-        data: series
-      }]
-    };
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!this.chart) return; // init pas encore fait
+    // Rebuild options à chaque changement d'inputs pertinents
+    this.applyOptions();
+  }
+
+  ngOnDestroy(): void {
+    this.resizeObs?.disconnect();
+    if (this.chart) {
+      this.chart.dispose();
+      this.chart = undefined;
+    }
+  }
+
+  private applyOptions(): void {
+    const options: EChartsOption = buildLine(this.series ?? [], {
+      axis: this.axis,
+      area: false,
+    });
+    this.chart?.setOption(options as any, { notMerge: true });
   }
 }

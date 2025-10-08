@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, signal } from '@angular/core';
+import { Component, computed, effect, signal, OnInit, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { HmsPipe } from '../shared/pipes/hms.pipe';
@@ -42,13 +42,13 @@ ngOnInit(): void {
   console.log('[video-detail] ngOnInit videoId=', this.videoId);
 
   this.api.getVideoById(this.videoId).subscribe({
-    next: (res) => {
+    next: (res: VideoDetailResponse) => {
       this.data.set(res);
       const sources = (res as any)?.sources || [];
       console.log('[video-detail] getVideoById ok, sources.len=', Array.isArray(sources) ? sources.length : -1,
                   'platforms=', Array.isArray(sources) ? sources.map((s:any)=>s.platform) : null);
     },
-    error: (err) => console.error('[video-detail] getVideoById failed', err)
+    error: (err: unknown) => console.error('[video-detail] getVideoById failed', err)
   });
 
   this.fetchTimeseries();
@@ -62,28 +62,27 @@ private fetchTimeseries(): void {
   const range = this.gran === 'hour' ? '7d' : '60d';
   console.log('[video-detail] fetchTimeseries gran=', this.gran, 'range=', range);
   this.api.getVideoTimeseries(this.videoId, { metric: 'views_native', interval: this.gran, range })
-    .subscribe({
-      next: (res) => {
-        const r: any = res as any;
-        this.ts = (r && typeof r === 'object' && 'timeseries' in r) ? r.timeseries : r || null;
-        const keys = this.ts ? Object.keys(this.ts) : null;
-        console.log('[video-detail] /timeseries normalized keys=', keys);
+  .subscribe({
+    next: (res: unknown) => {
+      const r: any = res as any;
+      this.ts = (r && typeof r === 'object' && 'timeseries' in r) ? r.timeseries : r || null;
+      const keys = this.ts ? Object.keys(this.ts) : null;
+      console.log('[video-detail] /timeseries normalized keys=', keys);
 
-        // Inspecter formes brutes
-        try {
-          const dbg = (x:any) => x==null ? null : { type: typeof x, isArray: Array.isArray(x), keys: (x && typeof x==='object') ? Object.keys(x).slice(0,5) : null, sample: Array.isArray(x) ? x.slice(0,3) : null };
-          console.log('[video-detail] raw.views =', dbg(this.ts?.views));
-          console.log('[video-detail] raw.YOUTUBE =', dbg(this.ts?.YOUTUBE));
-          console.log('[video-detail] raw.FACEBOOK =', dbg(this.ts?.FACEBOOK));
-        } catch {}
+      try {
+        const dbg = (x:any) => x==null ? null : { type: typeof x, isArray: Array.isArray(x), keys: (x && typeof x==='object') ? Object.keys(x).slice(0,5) : null, sample: Array.isArray(x) ? x.slice(0,3) : null };
+        console.log('[video-detail] raw.views =', dbg(this.ts?.views));
+        console.log('[video-detail] raw.YOUTUBE =', dbg(this.ts?.YOUTUBE));
+        console.log('[video-detail] raw.FACEBOOK =', dbg(this.ts?.FACEBOOK));
+      } catch {}
 
-        // Longueurs finales après parsing
-        try { console.log('[video-detail] global len=', this.globalViewsSeries().length, 'first3=', this.globalViewsSeries().slice(0,3)); } catch(e){}
-        try { console.log('[video-detail] YT len=', this.platformViewsSeries('YOUTUBE').length, 'first3=', this.platformViewsSeries('YOUTUBE').slice(0,3)); } catch(e){}
-        try { console.log('[video-detail] FB len=', this.platformViewsSeries('FACEBOOK').length, 'first3=', this.platformViewsSeries('FACEBOOK').slice(0,3)); } catch(e){}
-      },
-      error: (err) => console.error('[video-detail] getVideoTimeseries failed', err)
-    });
+      try { console.log('[video-detail] global len=', this.globalViewsSeries().length, 'first3=', this.globalViewsSeries().slice(0,3)); } catch(e){}
+      try { console.log('[video-detail] YT len=', this.platformViewsSeries('YOUTUBE').length, 'first3=', this.platformViewsSeries('YOUTUBE').slice(0,3)); } catch(e){}
+      try { console.log('[video-detail] FB len=', this.platformViewsSeries('FACEBOOK').length, 'first3=', this.platformViewsSeries('FACEBOOK').slice(0,3)); } catch(e){}
+    },
+    error: (err: unknown) => console.error('[video-detail] getVideoTimeseries failed', err)
+  });
+
 }
 
 // ================= Helpers & KPI =================
@@ -300,4 +299,23 @@ platformViewsSeries(pf: string | null | undefined): Array<[number, number]> {
   try { console.log('[video-detail] platformViewsSeries key=', key, 'len=', series.length, 'first3=', series.slice(0,3)); } catch {}
   return series;
 }
+
+
+/** Déduplique des rows par plateforme (facebook, youtube, …) – garde la première occurrence */
+private uniquePlatformRows(rows: Array<{ src?: { platform?: string } }>): Array<any> {
+  const seen = new Set<string>();
+  return (rows ?? []).filter((r) => {
+    const key = (r?.src?.platform ?? '').toLowerCase().trim();
+    if (!key) return false;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Version dédupliquée, prête pour l’affichage des graphes par plateforme */
+get latestRowsDedup(): any[] {
+  return this.uniquePlatformRows(this.latestRows());
+}
+
 }

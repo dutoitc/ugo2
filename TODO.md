@@ -12,6 +12,7 @@ Contraintes fortes (à respecter à la lettre) :
 - Pas de reformatage automatique (ESLint/Prettier). Pas d’espaces de fin, pas de retours chariot inutiles.
 - Garde les en-têtes/licences, les commentaires existants et le style du fichier.
 - Si une donnée de l’étape est ambiguë, prends la décision minimale et explique-la dans “Hypothèses”.
+- tu peux modifier package.json si nécessaire (utiliser des libs connues, ne pas réinventer la roue mais ne pas multiplier les libs inutiles)
 Sortie attendue :
 - Résumé des changements (très court)
 - Liste des fichiers modifiés (chemins relatifs)
