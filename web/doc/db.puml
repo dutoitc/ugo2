@@ -1,0 +1,168 @@
+@startuml
+' configuration
+hide circle
+skinparam linetype ortho
+
+' =========================
+' Tables
+' =========================
+entity "video" as video {
+  * id: BIGINT UNSIGNED
+  --
+  slug: VARCHAR(180)
+  title: VARCHAR(500)
+  description: TEXT
+  published_at: DATETIME(3)
+  duration_seconds: INT UNSIGNED
+  is_locked: TINYINT(1) DEFAULT 0
+  created_at: TIMESTAMP
+  updated_at: TIMESTAMP
+  --
+  INDEXES
+  PRIMARY: id
+  uk_video_slug: slug
+  idx_video_published_at: published_at
+  idx_video_locked: is_locked
+}
+
+entity "source_video" as sv {
+  * id: BIGINT UNSIGNED
+  --
+  video_id: BIGINT UNSIGNED [NULL]
+  platform: ENUM('YOUTUBE','FACEBOOK','INSTAGRAM','TIKTOK')
+  platform_format: ENUM('VIDEO','SHORT','REEL') [NULL]
+  platform_channel_id: VARCHAR(190) [NULL]
+  platform_video_id: VARCHAR(190)
+  title: VARCHAR(500) [NULL]
+  description: TEXT [NULL]
+  url: VARCHAR(500) [NULL]
+  etag: VARCHAR(190) [NULL]
+  published_at: DATETIME(3) [NULL]
+  duration_seconds: INT UNSIGNED [NULL]
+  is_active: TINYINT(1) DEFAULT 1
+  created_at: TIMESTAMP
+  updated_at: TIMESTAMP
+  --
+  INDEXES
+  PRIMARY: id
+  uk_source_platform_vid: (platform, platform_video_id)
+  idx_source_video_video_id: video_id
+  idx_source_platform_fmt: (platform, platform_format)
+  idx_source_published_at: published_at
+  idx_source_active: is_active
+  idx_sv_video_platform: (video_id, platform)
+}
+
+entity "metric_snapshot" as ms {
+  * id: BIGINT UNSIGNED
+  --
+  source_video_id: BIGINT UNSIGNED
+  snapshot_at: DATETIME(3)
+  views_native: BIGINT UNSIGNED [NULL]
+  avg_watch_seconds: INT UNSIGNED [NULL]
+  total_watch_seconds: BIGINT UNSIGNED [NULL]
+  video_length_seconds: INT UNSIGNED [NULL]
+  reach: BIGINT UNSIGNED [NULL]
+  unique_viewers: BIGINT UNSIGNED [NULL]
+  likes: BIGINT UNSIGNED [NULL]
+  comments: BIGINT UNSIGNED [NULL]
+  shares: BIGINT UNSIGNED [NULL]
+  reactions_total: BIGINT UNSIGNED [NULL]
+  reactions_like: BIGINT UNSIGNED [NULL]
+  reactions_love: BIGINT UNSIGNED [NULL]
+  reactions_wow: BIGINT UNSIGNED [NULL]
+  reactions_haha: BIGINT UNSIGNED [NULL]
+  reactions_sad: BIGINT UNSIGNED [NULL]
+  reactions_angry: BIGINT UNSIGNED [NULL]
+  created_at: TIMESTAMP
+  --
+  INDEXES
+  PRIMARY: id
+  uk_ms_source_time: (source_video_id, snapshot_at)
+  idx_ms_source_time: (source_video_id, snapshot_at)
+  idx_ms_snapshot_at: snapshot_at
+  idx_ms_views_native: views_native
+}
+
+entity "reconcile_override" as ro {
+  * id: BIGINT UNSIGNED
+  --
+  source_video_id: BIGINT UNSIGNED
+  action: VARCHAR(32)
+  target_video_id: BIGINT UNSIGNED [NULL]
+  note: VARCHAR(255) [NULL]
+  created_by: VARCHAR(128) DEFAULT 'api'
+  created_at: TIMESTAMP
+  --
+  INDEXES
+  PRIMARY: id
+  idx_ro_source: source_video_id
+  idx_ro_target: target_video_id
+}
+
+' =========================
+' Vues
+' =========================
+entity "v_metric_snapshot_enriched" as v_enr {
+  id
+  source_video_id
+  video_id
+  platform
+  platform_format
+  platform_video_id
+  url
+  source_title
+  source_published_at
+  video_title
+  video_published_at
+  snapshot_at
+  views_native
+  avg_watch_seconds
+  total_watch_seconds
+  length_seconds
+  reach
+  unique_viewers
+  likes
+  comments
+  shares
+  reactions_total, reactions_like, reactions_love, reactions_wow, reactions_haha, reactions_sad, reactions_angry
+  --
+  avg_watch_ratio
+  watch_equivalent
+  engagement_rate
+}
+
+entity "v_source_latest_snapshot" as v_last {
+  ... (dernier snapshot par source)
+}
+
+entity "v_source_latest_enriched" as v_last_enr {
+  ... (join de v_metric_snapshot_enriched sur v_source_latest_snapshot)
+}
+
+entity "v_video_latest_rollup" as v_roll {
+  video_id, slug, video_title, video_published_at, canonical_length_seconds
+  views_native_sum, likes_sum, comments_sum, shares_sum, total_watch_seconds_sum
+  views_yt, views_fb, views_ig, views_tt
+  avg_watch_ratio_est, watch_equivalent_sum, engagement_rate_sum
+}
+
+' =========================
+' Relations (cardinalités)
+' =========================
+video ||--o{ sv : "video_id (FK)"
+sv ||--o{ ms : "source_video_id (FK)"
+sv ||--o{ ro : "source_video_id (FK)"
+video ||--o{ ro : "target_video_id (FK, NULL)"
+
+' Vues (dépendances, traits pointillés)
+v_enr .. ms
+v_enr .. sv
+v_enr .. video
+v_last .. ms
+v_last_enr .. v_enr
+v_last_enr .. v_last
+v_roll .. video
+v_roll .. v_last_enr
+
+@enduml
