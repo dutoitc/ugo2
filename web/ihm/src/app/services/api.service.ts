@@ -8,9 +8,11 @@ export class ApiService {
 private http = inject(HttpClient);
 private base = '/api/v1';
 
+// ======================== /videos ========================
 listVideos(opts: {
     page?: number; size?: number; sort?: string;
-    q?: string | null; platform?: string | null;
+    q?: string | null; platform?: string | null; format?: string | null;
+    from?: string | null; to?: string | null;
   } = {}): Observable<VideoListResponse> {
     let params = new HttpParams();
     if (opts.page != null)     params = params.set('page', String(opts.page));
@@ -18,35 +20,62 @@ listVideos(opts: {
     if (opts.sort)             params = params.set('sort', opts.sort);
     if (opts.q)                params = params.set('q', opts.q);
     if (opts.platform)         params = params.set('platform', opts.platform);
+    if (opts.format)           params = params.set('format', opts.format);
+    if (opts.from)             params = params.set('from', opts.from);
+    if (opts.to)               params = params.set('to', opts.to);
     return this.http.get<VideoListResponse>(`${this.base}/videos`, { params });
   }
 
-  getVideoById(id: number): Observable<VideoDetailResponse> {
-    const params = new HttpParams().set('id', String(id));
-    return this.http.get<VideoDetailResponse>(`${this.base}/video`, { params });
+// ======================== /video (sélection) ========================
+getVideo(params: {
+    id?: number | string; slug?: string;
+    platform?: string; platform_video_id?: string;
+    timeseries?: 0|1|boolean; ts_limit?: number;
+  }): Observable<VideoDetailResponse> {
+    let p = new HttpParams();
+    if (params.id != null && params.id !== '') {
+      p = p.set('id', String(params.id));
+    } else if (params.slug) {
+      p = p.set('slug', params.slug);
+    } else if (params.platform && params.platform_video_id) {
+      p = p.set('platform', params.platform).set('platform_video_id', params.platform_video_id);
+  }
+    if (params.timeseries) p = p.set('timeseries', (params.timeseries === true ? 1 : (params.timeseries as any)).toString());
+    if (params.ts_limit != null) p = p.set('ts_limit', String(params.ts_limit));
+    return this.http.get<VideoDetailResponse>(`${this.base}/video`, { params: p });
   }
 
-  getVideoBySlug(slug: string): Observable<VideoDetailResponse> {
-    const params = new HttpParams().set('slug', slug);
-    return this.http.get<VideoDetailResponse>(`${this.base}/video`, { params });
-  }
+// Helpers spécifiques utilisés par les composants actuels
+getVideoById(id: number | string, opts?: { timeseries?: 0|1|boolean; ts_limit?: number }): Observable<VideoDetailResponse> {
+  return this.getVideo({ id, timeseries: opts?.timeseries ?? 0, ts_limit: opts?.ts_limit });
+}
+getVideoBySlug(slug: string, opts?: { timeseries?: 0|1|boolean; ts_limit?: number }): Observable<VideoDetailResponse> {
+  return this.getVideo({ slug, timeseries: opts?.timeseries ?? 0, ts_limit: opts?.ts_limit });
+}
+getVideoByPlatform(platform: string, platform_video_id: string, opts?: { timeseries?: 0|1|boolean; ts_limit?: number }): Observable<VideoDetailResponse> {
+  return this.getVideo({ platform, platform_video_id, timeseries: opts?.timeseries ?? 0, ts_limit: opts?.ts_limit });
+}
 
-
-getVideoTimeseries(
-  id: number,
-  params?: { metric?: string; interval?: 'hour'|'day'; range?: string; platforms?: string; agg?: 'sum'|'cumsum'; limit?: number }
-) {
+// ======================== /video/{id}/timeseries ========================
+getVideoTimeseries(id: number | string, params?: {
+    metric?: 'views_native'|'likes'|'comments'|'shares'|'total_watch_seconds';
+    interval?: 'hour'|'day';
+    range?: string;
+    platforms?: string;     // CSV 'FACEBOOK,YOUTUBE'
+    agg?: 'sum'|'cumsum';
+    limit?: number;         // >0 => downsample
+  }): Observable<unknown> {
   const qp = new HttpParams({
     fromObject: {
-      metric: params?.metric ?? 'views_native',
-      interval: params?.interval ?? 'hour',
-      range: params?.range ?? '7d',
-      platforms: params?.platforms ?? '',
-      agg: params?.agg ?? 'sum',
-      ...(params?.limit != null ? { limit: String(params.limit) } : {})
+      ...(params?.metric ? { metric: params.metric } : {}),
+      ...(params?.interval ? { interval: params.interval } : {}),
+      ...(params?.range ? { range: params.range } : {}),
+      ...(params?.platforms ? { platforms: params.platforms } : {}),
+      ...(params?.agg ? { agg: params.agg } : {}),
+      ...(params?.limit != null && params.limit > 0 ? { limit: String(params.limit) } : {})
     }
   });
-  return this.http.get(`/api/v1/video/${id}/timeseries`, { params: qp });
+  return this.http.get(`${this.base}/video/${id}/timeseries`, { params: qp });
 }
 
 }

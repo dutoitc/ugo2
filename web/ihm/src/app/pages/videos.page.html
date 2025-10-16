@@ -65,15 +65,15 @@
       </td>
 
       <!-- numériques / % à droite -->
-      <td class="num">{{ n(v.views_native_sum ?? 0) }}</td>
+      <td class="num">{{ n(+(v.views_native_sum ?? 0)) }}</td>
       <td class="num">{{ n(vp(v,'YOUTUBE')) }}</td>
       <td class="num">{{ n(vp(v,'FACEBOOK')) }}</td>
       <td class="num">{{ n(vp(v,'INSTAGRAM')) }}</td>
       <td class="num">{{ n(vp(v,'TIKTOK')) }}</td>
       <td class="num">
-        {{ v.engagement_rate_sum == null ? '—' : (v.engagement_rate_sum*100).toFixed(1)+'%' }}
+        {{ v.engagement_rate_sum == null ? '—' : ((+(v.engagement_rate_sum) * 100).toFixed(1) + '%') }}
       </td>
-      <td class="num">{{ n(v.watch_equivalent_sum) }}</td>
+      <td class="num">{{ n(v.watch_equivalent_sum != null ? +v.watch_equivalent_sum : null) }}</td>
       <td class="center">—</td>
     </tr>
     </tbody>
