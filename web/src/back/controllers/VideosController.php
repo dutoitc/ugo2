@@ -150,10 +150,30 @@ final class VideosController
             ];
         }
 
+        // SUM
+        $sqlSum = "
+          SELECT
+            COALESCE(SUM(views_yt),0) AS sum_yt,
+            COALESCE(SUM(views_fb),0) AS sum_fb,
+            COALESCE(SUM(views_ig),0) AS sum_ig,
+            COALESCE(SUM(views_tt),0) AS sum_tt
+          FROM v_video_latest_rollup
+        ";
+        $stSum = $pdo->prepare($sqlSum);
+        $stSum->execute();
+        $row = $stSum->fetch(\PDO::FETCH_ASSOC) ?: ['sum_yt'=>0,'sum_fb'=>0,'sum_ig'=>0,'sum_tt'=>0];
+        $sum = [
+          'youtube'   => (int)$row['sum_yt'],
+          'facebook'  => (int)$row['sum_fb'],
+          'instagram' => (int)$row['sum_ig'],
+          'tiktok'    => (int)$row['sum_tt'],
+        ];
+
         \Web\Lib\Http::json([
             'page'  => $page,
             'size'  => $size,
             'total' => $total,
+            'sum'   => $sum,
             'items' => $items
         ], 200);
     }

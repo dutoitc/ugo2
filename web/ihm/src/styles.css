@@ -28,7 +28,7 @@ body{
 .topbar .nav a:hover{ opacity:1 }
 
 /* conteneur IHM plein écran; les composants gèrent leur propre largeur */
-#app{ width:100%; margin:20px auto; padding:0 12px }
+#app{ width:99%; margin:20px auto; padding:0 12px }
 
 h1{ font-size:20px; margin:12px 0 8px }
 

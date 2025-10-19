@@ -5,8 +5,8 @@ import { HmsPipe } from '../shared/pipes/hms.pipe';
 import { IntFrPipe } from '../shared/pipes/int-fr.pipe';
 import { LocalDateTimePipe } from '../shared/pipes/local-datetime.pipe';
 import { ApiService } from '../services/api.service';
-import { VideoDetailResponse } from '../models';
-import { TimeSeriesChartComponent } from '../components/time-series-chart.component';
+import { VideoDetailResponse } from '../services/api.models';
+import { TimeSeriesChartComponent } from './time-series-chart.component';
 import VideoDetailAdapter from '../adapters/video-detail.adapter';
 import { TimeseriesPoint, LatestRowVm, ReactionsRowVm } from '../models/video-detail.vm';
 
@@ -45,39 +45,10 @@ trackByPlatform(index: number, item: any): string {
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id') || 0);
     this.videoId = Number.isFinite(id) ? id : 0;
-    // console.log('[video-detail] ngOnInit videoId=', this.videoId);
 
     this.api.getVideoById(this.videoId).subscribe({
       next: (res: VideoDetailResponse) => {
         this.data.set(res);
-
-// Temp
-          try {
-            const dbg = (this.data()?.sources || []).map((s:any) => {
-              const l = s.latest || {};
-              return {
-                pf: s.platform,
-                views: l.views_native ?? l.views,
-                len_s: l.length_seconds,
-                tot_s: l.total_watch_seconds,
-                ms: l.watch_time_ms,
-                min: l.estimated_minutes_watched,
-                avg_s: l.avg_watch_seconds,
-                ratio: l.avg_watch_ratio,
-                picked_s: this.pickWatchSeconds(l)
-              };
-            });
-            console.table(dbg);
-            console.log('rollWatchEqSeconds=', this.rollWatchEqSeconds(), 'sec');
-          } catch {}
-
-        const sources = (res as any)?.sources || [];
-        console.log(
-          '[video-detail] getVideoById ok, sources.len=',
-          Array.isArray(sources) ? sources.length : -1,
-          'platforms=',
-          Array.isArray(sources) ? sources.map((s: any) => s.platform) : null
-        );
       },
       error: (err: unknown) => console.error('[video-detail] getVideoById failed', err),
     });
@@ -91,34 +62,12 @@ trackByPlatform(index: number, item: any): string {
 
   private fetchTimeseries(): void {
     const range = this.gran === 'hour' ? '7d' : '60d';
-    // console.log('[video-detail] fetchTimeseries gran=', this.gran, 'range=', range);
     this.api
       .getVideoTimeseries(this.videoId, { metric: 'views_native', interval: this.gran, range })
       .subscribe({
         next: (res: unknown) => {
           const r: any = res as any;
           this.ts = (r && typeof r === 'object' && 'timeseries' in r) ? (r as any).timeseries : r || null;
-          const keys = this.ts ? Object.keys(this.ts) : null;
-          console.log('[video-detail] /timeseries normalized keys=', keys);
-
-          try {
-            const dbg = (x: any) =>
-              x == null
-                ? null
-                : {
-                    type: typeof x,
-                    isArray: Array.isArray(x),
-                    keys: x && typeof x === 'object' ? Object.keys(x).slice(0, 5) : null,
-                    sample: Array.isArray(x) ? x.slice(0, 3) : null,
-                  };
-            console.log('[video-detail] raw.views =', dbg(this.ts?.views));
-            console.log('[video-detail] raw.YOUTUBE =', dbg(this.ts?.YOUTUBE));
-            console.log('[video-detail] raw.FACEBOOK =', dbg(this.ts?.FACEBOOK));
-          } catch {}
-          this._seriesGlobal = null;
-          this._seriesByPf.clear();
-
-
         },
         error: (err: unknown) => console.error('[video-detail] getVideoTimeseries failed', err),
       });
@@ -299,7 +248,7 @@ private videoLengthSecondsFallback(): number {
   if (Number.isFinite(n) && n > 0) return Math.round(n);
   const lens = (this.data()?.sources ?? [])
     .map((s: any) => Number(s?.latest?.length_seconds))
-    .filter((x) => Number.isFinite(x) && x > 0) as number[];
+    .filter((x: number | null): x is number => x!=null && Number.isFinite(x) && x > 0) as number[];
   if (lens.length) return Math.round(lens.reduce((a,b)=>a+b,0) / lens.length);
   return 300; // 5 min par défaut
 }
