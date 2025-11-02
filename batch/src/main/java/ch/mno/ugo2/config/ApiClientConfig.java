@@ -3,7 +3,6 @@ package ch.mno.ugo2.config;
 import ch.mno.ugo2.api.WebApiClient;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -44,6 +43,7 @@ public class ApiClientConfig {
     public WebClient youtubeWebClient() {
         return WebClient.builder().filter(maskedRequestLog()).filter(logResponse()).build();
     }
+
 
 
     protected ExchangeFilterFunction maskedRequestLog() {

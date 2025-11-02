@@ -1,0 +1,88 @@
+{
+  "data": [
+    {
+      "name": "views",
+      "period": "lifetime",
+      "values": [
+        {
+          "value": 248
+        }
+      ],
+      "title": "Vues",
+      "description": "Nombre de fois que votre reel a \u00e9t\u00e9 lu ou affich\u00e9",
+      "id": "18181288036349846/insights/views/lifetime"
+    },
+    {
+      "name": "reach",
+      "period": "lifetime",
+      "values": [
+        {
+          "value": 150
+        }
+      ],
+      "title": "Comptes touch\u00e9s",
+      "description": "Le nombre de comptes uniques qui ont vu ce reel au moins une fois. La couverture est diff\u00e9rente des impressions, qui peuvent inclure plusieurs vues de votre reel par les m\u00eames comptes. Cet indicateur est une estimation.",
+      "id": "18181288036349846/insights/reach/lifetime"
+    },
+    {
+      "name": "saved",
+      "period": "lifetime",
+      "values": [
+        {
+          "value": 1
+        }
+      ],
+      "title": "Enregistr\u00e9",
+      "description": "Le nombre d\u2019enregistrements de votre reel.",
+      "id": "18181288036349846/insights/saved/lifetime"
+    },
+    {
+      "name": "likes",
+      "period": "lifetime",
+      "values": [
+        {
+          "value": 7
+        }
+      ],
+      "title": "J\u2019aime",
+      "description": "Le nombre de J\u2019aime sur votre reel.",
+      "id": "18181288036349846/insights/likes/lifetime"
+    },
+    {
+      "name": "comments",
+      "period": "lifetime",
+      "values": [
+        {
+          "value": 0
+        }
+      ],
+      "title": "Commentaires",
+      "description": "Le nombre de commentaires sur votre reel.",
+      "id": "18181288036349846/insights/comments/lifetime"
+    },
+    {
+      "name": "shares",
+      "period": "lifetime",
+      "values": [
+        {
+          "value": 4
+        }
+      ],
+      "title": "Partages",
+      "description": "Le nombre de partages de votre reel.",
+      "id": "18181288036349846/insights/shares/lifetime"
+    },
+    {
+      "name": "total_interactions",
+      "period": "lifetime",
+      "values": [
+        {
+          "value": 12
+        }
+      ],
+      "title": "Interactions avec les reels",
+      "description": "Le nombre de J\u2019aime, d\u2019enregistrements, de commentaires et de partages de vos reels, moins le nombre de Je n\u2019aime plus, d\u2019enregistrements annul\u00e9s et de commentaires supprim\u00e9s.",
+      "id": "18181288036349846/insights/total_interactions/lifetime"
+    }
+  ]
+}
