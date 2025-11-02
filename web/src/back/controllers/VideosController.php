@@ -288,4 +288,125 @@ final class VideosController
             'sources'=> $outSources
         ], 200);
     }
+
+
+    public function duplicates(): void
+    {
+        $pdo = $this->pdo();
+
+        // Paramètres optionnels
+        $windowH       = isset($_GET['window_h']) ? max(1, (int)$_GET['window_h']) : 48;   // fenêtre temporelle en heures
+        $durTolSeconds = isset($_GET['duration_tol_s']) ? max(0, (int)$_GET['duration_tol_s']) : 60; // tolérance sur la durée (sec)
+        $limit         = isset($_GET['limit']) ? max(1, min(1000, (int)$_GET['limit'])) : 200;
+        $offset        = isset($_GET['offset']) ? max(0, (int)$_GET['offset']) : 0;
+
+        // On paramétrise en secondes pour le TIMESTAMPDIFF
+        $windowSeconds = $windowH * 3600;
+
+        $sql = "
+            SELECT
+                ABS(TIMESTAMPDIFF(SECOND, v1.published_at, v2.published_at)) / 3600 AS delta_h,
+                v1.id              AS s1_id,
+                v1.video_id        AS v1_id,
+                v1.title           AS s1_title,
+                v1.published_at    AS s1_published_at,
+                v1.duration_seconds AS s1_duration_seconds,
+
+                v2.id              AS s2_id,
+                v2.video_id        AS v2_id,
+                v2.title           AS s2_title,
+                v2.published_at    AS s2_published_at,
+                v2.duration_seconds AS s2_duration_seconds
+            FROM source_video v1
+            INNER JOIN source_video v2
+                ON v2.id > v1.id
+               AND ABS(TIMESTAMPDIFF(SECOND, v1.published_at, v2.published_at)) <= ?
+               AND (
+                    v1.duration_seconds IS NULL
+                    OR v2.duration_seconds IS NULL
+                    OR ABS(CONVERT(v1.duration_seconds, SIGNED) - CONVERT(v2.duration_seconds, SIGNED)) < ?
+                   )
+            WHERE (
+                    v1.video_id IS NULL
+                    OR v2.video_id IS NULL
+                    OR v1.video_id != v2.video_id
+                  )
+            ORDER BY delta_h ASC, s1_id ASC
+            LIMIT ? OFFSET ?;
+        ";
+
+        $st = $pdo->prepare($sql);
+        $st->execute([$windowSeconds, $durTolSeconds, $limit, $offset]);
+
+        $items = [];
+        while ($row = $st->fetch(\PDO::FETCH_ASSOC)) {
+            $items[] = [
+                'delta_h' => (float)$row['delta_h'],
+
+                'source1' => [
+                    'id'               => (int)$row['s1_id'],
+                    'video_id'         => (int)$row['v1_id'],
+                    'title'            => $row['s1_title'],
+                    'published_at'     => $row['s1_published_at'],
+                    'duration_seconds' => $row['s1_duration_seconds'] !== null ? (int)$row['s1_duration_seconds'] : null,
+                ],
+                'source2' => [
+                    'id'               => (int)$row['s2_id'],
+                    'video_id'         => (int)$row['v2_id'],
+                    'title'            => $row['s2_title'],
+                    'published_at'     => $row['s2_published_at'],
+                    'duration_seconds' => $row['s2_duration_seconds'] !== null ? (int)$row['s2_duration_seconds'] : null,
+                ],
+            ];
+        }
+
+        \Web\Lib\Http::json([
+            'params' => [
+                'window_h'        => $windowH,
+                'duration_tol_s'  => $durTolSeconds,
+                'limit'           => $limit,
+                'offset'          => $offset,
+            ],
+            'count' => count($items),
+            'items' => $items,
+        ], 200);
+    }
+
+
+    /**
+     * POST /api/v1/duplicates:resolve
+     * Body JSON : { "videoIdToKeep":123, "videoIdToDelete":124, "videoSourceIdToUpdate":5678 }
+     */
+    public function resolveDuplicate(): void
+    {
+        $pdo = $this->pdo();
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        $keep   = $input['videoIdToKeep']   ?? null;
+        $delete = $input['videoIdToDelete'] ?? null;
+        $update = $input['videoSourceIdToUpdate'] ?? null;
+
+        if (!$keep || !$delete || !$update) {
+            \Web\Lib\Http::json(['error' => 'missing_params'], 400);
+            return;
+        }
+
+        $pdo->beginTransaction();
+        try {
+            // 1. update source_video
+            $st1 = $pdo->prepare('UPDATE source_video SET video_id = ? WHERE id = ?');
+            $st1->execute([$keep, $update]);
+
+            // 2. delete video
+            $st2 = $pdo->prepare('DELETE FROM video WHERE id = ?');
+            $st2->execute([$delete]);
+
+            $pdo->commit();
+            \Web\Lib\Http::json(['ok' => true, 'kept' => $keep, 'deleted' => $delete, 'updated_source' => $update], 200);
+        } catch (\Throwable $e) {
+            $pdo->rollBack();
+            \Web\Lib\Http::json(['error' => 'db_error', 'message' => $e->getMessage()], 500);
+        }
+    }
+
 }

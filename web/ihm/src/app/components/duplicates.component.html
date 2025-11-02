@@ -1,0 +1,57 @@
+<div class="p-4">
+  <h2 class="text-xl font-bold mb-4">
+    Doublons détectés ({{ data()?.count || 0 }})
+  </h2>
+
+  <ng-container *ngIf="data() as d">
+    <div *ngFor="let dup of d.items" class="dup-block">
+      <!-- header global -->
+      <div class="dup-header">
+        VideoSource #{{ dup.source1.id }} ↔ #{{ dup.source2.id }}
+        <span class="delta">Δ {{ dup.delta_h | number:'1.1-1' }} h</span>
+      </div>
+
+      <!-- cartes côte à côte -->
+      <div class="dup-cards">
+        <!-- Carte gauche -->
+        <div class="dup-card left">
+          <div class="card-header">
+            <div>{{ dup.source1.published_at | localDateTime }}</div>
+            <div>{{ dup.source1.duration_seconds }} s</div>
+            <div>ID vidéo #{{ dup.source1.video_id }}</div>
+          </div>
+          <div class="card-body">
+            <div class="title">{{ dup.source1.title }}</div>
+          </div>
+          <div class="card-footer">
+            <button (click)="keep(dup.source1.video_id, dup.source2.video_id, dup.source2.id)">
+            Garder celui-ci
+            </button>
+          </div>
+        </div>
+
+
+        <!-- Carte droite -->
+        <div class="dup-card right">
+          <div class="card-header">
+            <div>{{ dup.source2.published_at | localDateTime }}</div>
+            <div>{{ dup.source2.duration_seconds }} s</div>
+            <div>ID vidéo #{{ dup.source2.video_id }}</div>
+          </div>
+          <div class="card-body">
+            <div class="title">{{ dup.source2.title }}</div>
+          </div>
+          <div class="card-footer">
+            <button (click)="keep(dup.source2.video_id, dup.source1.video_id, dup.source1.id)">
+            Garder celui-ci
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+
+  <div *ngIf="!data()">
+    <p class="italic text-gray-500">Chargement en cours...</p>
+  </div>
+</div>

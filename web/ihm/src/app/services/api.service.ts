@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { VideoListResponse, VideoDetailResponse } from '../services/api.models';
+import { VideoListResponse, VideoDetailResponse, DuplicatesResponse } from '../services/api.models';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -99,4 +99,16 @@ export class ApiService {
     const httpParams = new HttpParams({ fromObject: queryParams });
     return this.http.get(`${this.base}/video/${id}/timeseries`, { params: httpParams });
   }
+
+  // ======================== /videos/duplicates ========================
+  getDuplicates(): Observable<DuplicatesResponse> {
+    return this.http.get<DuplicatesResponse>(`${this.base}/duplicates`);
+  }
+
+  // ======================== /duplicates:resolve ========================
+  resolveDuplicate(videoIdToKeep: number, videoIdToDelete: number, videoSourceIdToUpdate: number) {
+    const body = { videoIdToKeep, videoIdToDelete, videoSourceIdToUpdate };
+    return this.http.post(`${this.base}/duplicates:resolve`, body);
+  }
+
 }

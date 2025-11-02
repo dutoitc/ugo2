@@ -127,3 +127,34 @@ export interface VideoDetailResponse {
   }>;
 
 }
+
+
+export interface DuplicatesResponse {
+  params: {
+    window_h: number;
+    duration_tol_s: number;
+    limit: number;
+    offset: number;
+  };
+  count: number;
+  items: DuplicateItem[];
+}
+
+export interface DuplicateItem {
+  delta_h: number;
+  source1: {
+    id: number;
+    video_id: number;
+    title: string;
+    published_at: string;
+    duration_seconds: number | null;
+  };
+  source2: {
+    id: number;
+    video_id: number;
+    title: string;
+    published_at: string;
+    duration_seconds: number | null;
+  };
+}
+

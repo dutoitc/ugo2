@@ -11,5 +11,10 @@ export const APP_ROUTES: Routes = [
     loadComponent: () =>
       import('./pages/video-detail.page').then(m => m.VideoDetailPage),
   },
+  {
+    path: 'duplicates',
+    loadComponent: () =>
+      import('./pages/duplicates.page').then(m => m.DuplicatesPage),
+  },
   { path: '**', redirectTo: '' },
 ];

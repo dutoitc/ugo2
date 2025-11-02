@@ -1,0 +1,92 @@
+/* bloc global */
+.dup-block {
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  margin-bottom: 14px;
+  overflow: hidden;
+  width: 66%;
+  margin-left: 17%;
+}
+
+/* header global */
+.dup-header {
+  background: #e6e9ef;
+  padding: 4px 8px;
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #bbb;
+}
+.dup-header .delta {
+  font-weight: 500;
+  font-size: 12px;
+  color: #333;
+}
+
+/* conteneur cartes */
+.dup-cards {
+  display: flex;
+  gap: 0;
+  justify-content: space-between;
+}
+
+/* cartes */
+.dup-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-left: 1px solid #ccc;
+  padding: 6px 8px;
+  font-size: 13px;
+  line-height: 1.3;
+  box-sizing: border-box;
+}
+
+.dup-card.left {
+  background: #f8f9fb;
+  border-right: 1px solid #ccc;
+}
+
+.dup-card.right {
+  background: #fcfcfc;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #555;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 2px;
+  margin-bottom: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.card-body .title {
+  color: #666;
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.card-footer {
+  text-align: center;
+  padding-top: 6px;
+}
+
+.card-footer button {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid #bbb;
+  background: #f4f4f4;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.card-footer button:hover {
+  background: #e0f0ff;
+  border-color: #66a3ff;
+}

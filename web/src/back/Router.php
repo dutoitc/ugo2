@@ -40,6 +40,8 @@ final class Router
             // Lecture
             ['GET',  '/api/v1/videos',                ['Web\\Controllers\\VideosController', 'list']],
             ['GET',  '/api/v1/video',                 ['Web\\Controllers\\VideosController', 'get']],
+            ['GET',  '/api/v1/duplicates',            ['Web\\Controllers\\VideosController', 'duplicates']],
+            ['POST', '/api/v1/duplicates:resolve',    ['Web\\Controllers\\VideosController', 'resolveDuplicate']],
             ['GET',  '/api/v1/aggregates/presenters', ['Web\\Controllers\\AggregatesController', 'presenters']],
             ['GET',  '/api/v1/aggregates/directors',  ['Web\\Controllers\\AggregatesController', 'realisateurs']],
         ];

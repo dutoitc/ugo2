@@ -1,0 +1,55 @@
+@startuml
+' configuration
+hide circle
+skinparam linetype ortho
+
+' =========================
+' Tables
+' =========================
+entity "video" as video {
+  * id: BIGINT UNSIGNED
+  --
+  title: VARCHAR(500)
+}
+
+entity "source_video" as sv {
+  * id: BIGINT UNSIGNED
+  --
+  video_id: BIGINT UNSIGNED [NULL]
+  platform: ENUM('YOUTUBE','FACEBOOK','INSTAGRAM','TIKTOK')
+  platform_format: ENUM('VIDEO','SHORT','REEL') [NULL]
+  title: VARCHAR(500) [NULL]
+  description: TEXT [NULL]
+  url: VARCHAR(500) [NULL]
+}
+
+entity "metric_snapshot" as ms {
+  * id: BIGINT UNSIGNED
+  --
+  source_video_id: BIGINT UNSIGNED
+  snapshot_at: DATETIME(3)
+  views_native: BIGINT UNSIGNED [NULL]
+  reach: BIGINT UNSIGNED [NULL]
+  unique_viewers: BIGINT UNSIGNED [NULL]
+  likes: BIGINT UNSIGNED [NULL]
+  shares: BIGINT UNSIGNED [NULL]
+}
+
+entity "reconcile_override" as ro {
+  * id: BIGINT UNSIGNED
+  --
+  source_video_id: BIGINT UNSIGNED
+  action: VARCHAR(32)
+  target_video_id: BIGINT UNSIGNED [NULL]
+  note: VARCHAR(255) [NULL]
+}
+
+' =========================
+' Relations (cardinalités)
+' =========================
+video ||--o{ sv : "video_id (FK)"
+sv ||--o{ ms : "source_video_id (FK)"
+sv ||--o{ ro : "source_video_id (FK)"
+video ||--o{ ro : "target_video_id (FK, NULL)"
+
+@enduml

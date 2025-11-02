@@ -24,7 +24,7 @@ export class VideoListComponent {
   private api = inject(ApiService);
 
   page = 1;
-  size = 20;
+  size = 50;
   pages = 1;
   sort: SortKey = 'published_desc';
   platform: Platform | undefined = undefined;
