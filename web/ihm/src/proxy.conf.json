@@ -1,6 +1,6 @@
 {
   "/api": {
-    "target": "https://ugo2.capstv.ch",
+    "target": "https://xplore-ugo2.randonneurs.ch/",
     "secure": false,
     "changeOrigin": true
   }

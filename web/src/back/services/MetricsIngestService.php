@@ -50,7 +50,9 @@ final class MetricsIngestService
                             $sourceId = $this->sources->createMinimal($dto->platform, $dto->platform_format, (string)$dto->platform_video_id);
                         } else {
                             // si format fourni, on le renseigne si NULL
-                            $this->sources->setPlatformFormatIfNull($sourceId, $dto->platform_format);
+                            if ($dto->platform_format !== null) {
+                                $this->sources->setPlatformFormatIfNull($sourceId, $dto->platform_format);
+                            }
                         }
                     }
 

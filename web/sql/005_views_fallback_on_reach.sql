@@ -1,20 +1,5 @@
-/* =======================================================================
-   UGO2 - VUES ANALYTIQUES (VERSION COMPATIBLE)
-   ======================================================================= */
-
-SET time_zone = '+00:00';
-
--- Nettoyage (ordre inverse des dépendances)
-DROP VIEW IF EXISTS `v_video_latest_rollup`;
-DROP VIEW IF EXISTS `v_source_latest_enriched`;
-DROP VIEW IF EXISTS `v_source_latest_snapshot`;
 DROP VIEW IF EXISTS `v_metric_snapshot_enriched`;
 
-
-
-/* ---------------------------------------------------------------------------
-   v_metric_snapshot_enriched : ratios calculés à la volée (par snapshot)
-   --------------------------------------------------------------------------- */
 CREATE VIEW `v_metric_snapshot_enriched` AS
 SELECT
   ms.id,
@@ -49,6 +34,9 @@ SELECT
   ms.reactions_sad,
   ms.reactions_angry,
 
+  -- NEW : vue native fallback (important pour Facebook Reels)
+  COALESCE(ms.views_native, ms.reach) AS views_native_fallback,
+
   -- ratios dérivés
   CASE
     WHEN COALESCE(ms.video_length_seconds, sv.duration_seconds, v.duration_seconds, 0) = 0
@@ -65,9 +53,10 @@ SELECT
   END AS watch_equivalent,
 
   CASE
-    WHEN COALESCE(ms.views_native, 0) = 0
+    WHEN COALESCE(ms.views_native, ms.reach, 0) = 0
       THEN NULL
-    ELSE (ms.likes + ms.comments + ms.shares) / ms.views_native
+    ELSE (ms.likes + ms.comments + ms.shares) /
+         COALESCE(ms.views_native, ms.reach)
   END AS engagement_rate
 
 FROM metric_snapshot ms
@@ -76,11 +65,8 @@ LEFT JOIN video v ON v.id = sv.video_id;
 
 
 
-/* ---------------------------------------------------------------------------
-   v_source_latest_snapshot : dernier snapshot par source
-   VERSION 100% COMPATIBLE : sous-requête corrélée dans WHERE
-   (aucune sous-requête dans FROM, aucune fonction fenêtre)
-   --------------------------------------------------------------------------- */
+DROP VIEW IF EXISTS `v_source_latest_snapshot`;
+
 CREATE VIEW `v_source_latest_snapshot` AS
 SELECT ms.*
 FROM metric_snapshot ms
@@ -91,20 +77,16 @@ WHERE ms.snapshot_at = (
 );
 
 
+DROP VIEW IF EXISTS `v_source_latest_enriched`;
 
-/* ---------------------------------------------------------------------------
-   v_source_latest_enriched : enrichissement du dernier snapshot
-   --------------------------------------------------------------------------- */
 CREATE VIEW `v_source_latest_enriched` AS
 SELECT e.*
 FROM v_metric_snapshot_enriched e
 JOIN v_source_latest_snapshot s ON s.id = e.id;
 
 
+DROP VIEW IF EXISTS `v_video_latest_rollup`;
 
-/* ---------------------------------------------------------------------------
-   v_video_latest_rollup : agrégats et ratios cross-plateforme
-   --------------------------------------------------------------------------- */
 CREATE VIEW `v_video_latest_rollup` AS
 SELECT
   v.id                      AS video_id,
@@ -113,24 +95,24 @@ SELECT
   v.published_at            AS video_published_at,
   v.duration_seconds        AS canonical_length_seconds,
 
-  -- agrégats (somme) sur les derniers snapshots de chaque source
-  SUM(e.views_native)        AS views_native_sum,
-  SUM(e.likes)               AS likes_sum,
-  SUM(e.comments)            AS comments_sum,
-  SUM(e.shares)              AS shares_sum,
-  SUM(e.total_watch_seconds) AS total_watch_seconds_sum,
+  -- agrégats (somme) sur les derniers snapshots
+  SUM(e.views_native_fallback)         AS views_native_sum,
+  SUM(e.likes)                         AS likes_sum,
+  SUM(e.comments)                      AS comments_sum,
+  SUM(e.shares)                        AS shares_sum,
+  SUM(e.total_watch_seconds)           AS total_watch_seconds_sum,
 
-  -- métriques par plateforme
-  SUM(CASE WHEN e.platform='YOUTUBE'  THEN e.views_native ELSE 0 END) AS views_yt,
-  SUM(CASE WHEN e.platform='FACEBOOK' THEN e.views_native ELSE 0 END) AS views_fb,
-  SUM(CASE WHEN e.platform='INSTAGRAM' THEN e.views_native ELSE 0 END) AS views_ig,
-  SUM(CASE WHEN e.platform='TIKTOK'   THEN e.views_native ELSE 0 END) AS views_tt,
+  -- par plateforme
+  SUM(CASE WHEN e.platform='YOUTUBE'  THEN e.views_native_fallback ELSE 0 END) AS views_yt,
+  SUM(CASE WHEN e.platform='FACEBOOK' THEN e.views_native_fallback ELSE 0 END) AS views_fb,
+  SUM(CASE WHEN e.platform='INSTAGRAM' THEN e.views_native_fallback ELSE 0 END) AS views_ig,
+  SUM(CASE WHEN e.platform='TIKTOK'   THEN e.views_native_fallback ELSE 0 END) AS views_tt,
 
-  -- ratios dérivés cross-plateforme
+  -- ratios dérivés
   CASE
-    WHEN COALESCE(v.duration_seconds,0) = 0 OR COALESCE(SUM(e.views_native),0) = 0
+    WHEN COALESCE(v.duration_seconds,0) = 0 OR COALESCE(SUM(e.views_native_fallback),0) = 0
       THEN NULL
-    ELSE (SUM(e.total_watch_seconds) / SUM(e.views_native)) / v.duration_seconds
+    ELSE (SUM(e.total_watch_seconds) / SUM(e.views_native_fallback)) / v.duration_seconds
   END AS avg_watch_ratio_est,
 
   CASE
@@ -140,9 +122,10 @@ SELECT
   END AS watch_equivalent_sum,
 
   CASE
-    WHEN COALESCE(SUM(e.views_native),0) = 0
+    WHEN COALESCE(SUM(e.views_native_fallback),0) = 0
       THEN NULL
-    ELSE (SUM(e.likes) + SUM(e.comments) + SUM(e.shares)) / SUM(e.views_native)
+    ELSE (SUM(e.likes) + SUM(e.comments) + SUM(e.shares)) /
+         SUM(e.views_native_fallback)
   END AS engagement_rate_sum
 
 FROM video v
@@ -150,5 +133,4 @@ LEFT JOIN source_video sv
        ON sv.video_id = v.id AND sv.is_active = 1
 LEFT JOIN v_source_latest_enriched e
        ON e.source_video_id = sv.id
-
 GROUP BY v.id, v.slug, v.title, v.published_at, v.duration_seconds;

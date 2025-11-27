@@ -18,11 +18,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -33,7 +29,9 @@ public class FacebookCollectorService {
     private final FacebookProps cfg;
     private final WebApiSinkService sink;
 
-    /** Collecte multi-pages + upsert sources + upsert metrics. */
+    /**
+     * Collecte multi-pages + upsert sources + upsert metrics.
+     */
     public int collect() {
         Set<String> allVideoIds = new LinkedHashSet<>();
         for (String pageId : cfg.getPageIds()) {
@@ -49,7 +47,9 @@ public class FacebookCollectorService {
                 .blockOptional().orElse(0);
     }
 
-    /** Collecte par IDs, prépare sources + metrics, pousse côté API de manière non bloquante. */
+    /**
+     * Collecte par IDs, prépare sources + metrics, pousse côté API de manière non bloquante.
+     */
     public Mono<Integer> collectAndPushByIds(List<String> ids) {
         if (ids == null || ids.isEmpty()) return Mono.just(0);
 
@@ -78,8 +78,8 @@ public class FacebookCollectorService {
                         , /*concurrency*/ 6)
                 .collectList()
                 .flatMap(list -> Mono.fromRunnable(() -> {
-                                    var sources  = list.stream().map(SrcAndMet::src).toList();
-                                    var snapshots= list.stream().map(SrcAndMet::met).toList();
+                                    var sources = list.stream().map(SrcAndMet::src).toList();
+                                    var snapshots = list.stream().map(SrcAndMet::met).toList();
                                     log.info("[FB] upsert {} sources, {} metrics", sources.size(), snapshots.size());
 
                                     // ⚠ appels bloquants → boundedElastic
@@ -91,48 +91,126 @@ public class FacebookCollectorService {
                 .thenReturn(ids.size());
     }
 
-    /** Découverte d’IDs vidéo via /{page}/published_posts + attachments{media_type,target}. */
+    /**
+     * Découverte d’IDs vidéo via:
+     * - /published_posts   → vidéo visibles dans la timeline
+     * - /videos?type=uploaded → toutes les vidéos natives (même anciennes)
+     */
     private List<String> discoverVideoIdsForPage(String pageId) {
-        List<String> out = new ArrayList<>();
-        String after = null;
+        Set<String> out = new LinkedHashSet<>();
+        final String version = cfg.getApiVersion();
+        final String token = cfg.getAccessToken();
+
+        out.addAll(findVideos(pageId, version, token, cfg.getPageSize(), null));
+        out.addAll(findUploaded(pageId, version, token, out));
+        out.addAll(findReels(pageId, version, token, out));
+
+        return out.stream()
+                .distinct()
+                .limit(cfg.getMaxVideosPerRun())
+                .toList();
+    }
+
+    /** /published_posts (pagination) */
+    private Collection<String> findVideos(String pageId, String version, String token, int limit, String after) {
         int pages = 0;
 
-        // Fenêtre de collecte (rolling)
-        int days = cfg.getWindowDaysRolling();
-        String since = LocalDate.now(ZoneOffset.UTC).minusDays(days).atStartOfDay().toInstant(ZoneOffset.UTC).toString();
-        String until = Instant.now().toString();
-
+        Set<String> out1 = new LinkedHashSet<>();
         do {
-            FacebookPostsResponse resp = fb.publishedPosts(
-                    cfg.getApiVersion(), pageId, cfg.getAccessToken(),
-                    cfg.getPageSize(), after, since, until
-            ).block(); // Mono → BLOQUANT ponctuel ici OK si rare, sinon transformer en chaîne réactive complète
+            FacebookPostsResponse resp =
+                    fb.publishedPosts(version, pageId, token, limit, after)
+                            .block();
 
             if (resp == null || resp.getData() == null) break;
-            for (var post : resp.getData()) {
-                if (post.getAttachments() == null || post.getAttachments().getData() == null) continue;
-                for (var att : post.getAttachments().getData()) {
-                    var mediaType = att.getMediaType();
-                    var target = att.getTarget();
-                    if (target == null || StringUtils.isBlank(target.getId())) continue;
 
-                    if (StringUtils.containsIgnoreCase(mediaType, "video")) {
-                        out.add(target.getId());
-                    }
+            for (var post : resp.getData()) {
+                if (post.getAttachments() == null || post.getAttachments().getData() == null)
+                    continue;
+
+                for (var att : post.getAttachments().getData()) {
+                    out1.addAll(getVideoIds(att));
                 }
             }
 
-            if (resp.getPaging() == null || resp.getPaging().getCursors() == null) break;
-            String nextAfter = resp.getPaging().getCursors().getAfter();
-            after = StringUtils.isNotBlank(nextAfter) ? nextAfter : null;
             pages++;
-        } while (after != null && out.size() < cfg.getMaxVideosPerRun());
+            after = (resp.getPaging() != null &&
+                    resp.getPaging().getCursors() != null &&
+                    StringUtils.isNotBlank(resp.getPaging().getCursors().getAfter()))
+                    ? resp.getPaging().getCursors().getAfter()
+                    : null;
 
-        log.info("[FB] page {} -> {} videoIds (pages={})", pageId, out.size(), pages);
-        return out.stream().distinct().limit(cfg.getMaxVideosPerRun()).collect(Collectors.toList());
+        } while (after != null && out1.size() < cfg.getMaxVideosPerRun());
+
+        log.info("[FB] page {} -> {} videoIds (pages={})", pageId, out1.size(), pages);
+        return out1;
     }
 
-    /** Aplatisseur simple: InsightsResponse → Map<name, firstNumericValue>. */
+    private static Collection<String> getVideoIds(FacebookPostsResponse.Attachment att) {
+        // media_type = video
+        if (StringUtils.containsIgnoreCase(att.getMediaType(), "video")
+                && att.getTarget() != null) {
+            return List.of(att.getTarget().getId());
+        }
+
+        // target.type = video
+        if (att.getTarget() != null &&
+                "video".equalsIgnoreCase(att.getTarget().getType())) {
+            return List.of(att.getTarget().getId());
+        }
+
+        // subattachments
+        if (att.getSubattachments() != null && att.getSubattachments().getData() != null) {
+            var lst = new ArrayList<String>();
+            for (var sub : att.getSubattachments().getData()) {
+                if (sub.getTarget() != null &&
+                        "video".equalsIgnoreCase(sub.getTarget().getType())) {
+                    lst.add(sub.getTarget().getId());
+                }
+            }
+            return lst;
+        }
+
+        // media.id (reels / inline videos)
+        if (att.getMedia() != null && att.getMedia().getId() != null) {
+            return List.of(att.getMedia().getId());
+        }
+
+        return List.of();
+    }
+
+
+    /** videos?type=uploaded */
+    private List<String> findUploaded(String pageId, String version, String token, Set<String> out) {
+        try {
+            List<String> uploaded = fb.videosUploaded(version, pageId, token)
+                    .blockOptional()
+                    .orElse(List.of());
+            log.info("FindUploaded returned {}", uploaded.size());
+            return uploaded;
+        } catch (Exception e) {
+            log.warn("[FB] page {} /videos?type=uploaded failed: {}", pageId, e.toString());
+        }
+        return List.of();
+    }
+
+    /** videos?type=reels */
+    private List<String> findReels(String pageId, String version, String token, Set<String> out) {
+        try {
+            List<String> reels = fb.videosReels(version, pageId, token)
+                    .blockOptional()
+                    .orElse(List.of());
+            log.info("FindReels returned {}", reels.size());
+            return reels;
+        } catch (Exception e) {
+            log.warn("[FB] page {} /videos?type=reels failed: {}", pageId, e.toString());
+        }
+        return List.of();
+    }
+
+
+    /**
+     * Aplatisseur simple: InsightsResponse → Map<name, firstNumericValue>.
+     */
     static Map<String, Long> toFlatMap(InsightsResponse resp) {
         Map<String, Long> out = new LinkedHashMap<>();
         if (resp == null || resp.data() == null) return out;
@@ -187,9 +265,10 @@ public class FacebookCollectorService {
 
     private static final int DECIMAL_SCALE = 10_000;
 
-    /** Convertit un JsonNode numérique (ou texte numérique) en Long.
-     *  - entiers: tel quel
-     *  - décimaux: arrondi(x * DECIMAL_SCALE)
+    /**
+     * Convertit un JsonNode numérique (ou texte numérique) en Long.
+     * - entiers: tel quel
+     * - décimaux: arrondi(x * DECIMAL_SCALE)
      */
     private static Long coerceToLong(JsonNode n) {
         try {
@@ -221,11 +300,14 @@ public class FacebookCollectorService {
         return null;
     }
 
-    /** Autorise chiffres/lettres/underscore uniquement. */
+    /**
+     * Autorise chiffres/lettres/underscore uniquement.
+     */
     private static String normalizeKey(String k) {
         if (k == null) return "";
         return k.replaceAll("[^A-Za-z0-9_]", "_");
     }
 
-    private record SrcAndMet(SourceUpsertItem src, MetricsUpsertItem met) {}
+    private record SrcAndMet(SourceUpsertItem src, MetricsUpsertItem met) {
+    }
 }

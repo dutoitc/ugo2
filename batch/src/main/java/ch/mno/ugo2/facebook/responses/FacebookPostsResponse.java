@@ -32,13 +32,33 @@ public class FacebookPostsResponse {
     public static class Attachment {
         @JsonProperty("media_type")
         private String mediaType;
+        private Target target;
+        private SubAttachments subattachments;
 
+        @JsonProperty("media")
+        private Media media;     // <<==== AJOUT
+    }
+
+    @Data
+    public static class Media {
+        private String id;       // parfois présent
+        private String source;   // pour les vidéos inline
+    }
+
+    @Data
+    public static class SubAttachments {
+        private List<SubAttachmentsData> data;
+    }
+
+    @Data
+    public static class SubAttachmentsData {
         private Target target;
     }
 
     @Data
     public static class Target {
         private String id;
+        private String type;
     }
 
     @Data

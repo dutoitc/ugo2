@@ -33,21 +33,21 @@ CREATE TABLE `video` (
 -- =========================================================
 CREATE TABLE `source_video` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `video_id` BIGINT UNSIGNED NULL,                            -- lien optionnel vers VIDEO (peut être NULL avant réconciliation)
+  `video_id` BIGINT UNSIGNED NULL,
 
   `platform` ENUM('YOUTUBE','FACEBOOK','INSTAGRAM','TIKTOK') NOT NULL,
-  `platform_format` ENUM('VIDEO','SHORT','REEL') NULL,        -- type de contenu (YT: VIDEO/SHORT, FB: VIDEO/REEL, ...)
+  `platform_format` ENUM('VIDEO','SHORT','REEL') NULL,
 
   `platform_channel_id` VARCHAR(190) NULL,
-  `platform_video_id`   VARCHAR(190) NOT NULL,                -- identifiant natif (ex: YouTube videoId, Facebook {pageId_postId})
+  `platform_video_id`   VARCHAR(190) NOT NULL,
 
   `title` VARCHAR(500) NULL,
   `description` TEXT NULL,
   `url` VARCHAR(500) NULL,
-  `etag` VARCHAR(190) NULL,                                   -- si APIs exposent un etag/version
+  `etag` VARCHAR(190) NULL,
 
-  `published_at` DATETIME(3) NULL,                            -- UTC selon la plateforme
-  `duration_seconds` INT UNSIGNED NULL,                       -- longueur au niveau source
+  `published_at` DATETIME(3) NULL,
+  `duration_seconds` INT UNSIGNED NULL,
 
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
 
@@ -56,7 +56,6 @@ CREATE TABLE `source_video` (
 
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_source_platform_vid` (`platform`,`platform_video_id`),
-  ADD UNIQUE KEY uq_source_platform_video (platform, platform_video_id),
   KEY `idx_source_video_video_id` (`video_id`),
 
   CONSTRAINT `fk_source_video__video`

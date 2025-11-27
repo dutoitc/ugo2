@@ -139,17 +139,36 @@ final class MetricsIngestController
         }
     }
 
+    private static function toNullableInt($v) {
+        if ($v === null || $v === '') {
+            return null;
+        }
 
-    private static function toNullableInt(mixed $v): ?int
-    {
-        if ($v === null || $v === '') return null;
-        return (int)$v;
+        // Accepte string numérique, int ou float → cast
+        if (is_numeric($v)) {
+            return (int)$v;
+        }
+
+        // Tente de parser en dernier recours
+        $v2 = filter_var($v, FILTER_SANITIZE_NUMBER_INT);
+        return $v2 === '' ? null : (int)$v2;
     }
 
     private static function toNullableFloat(mixed $v): ?float
     {
-        if ($v === null || $v === '') return null;
-        return (float)$v;
+        if ($v === null || $v === '') {
+            return null;
+        }
+
+        // True pour:  "23", "23.4", 23, 23.4, "0.9871", "1e3"
+        if (is_numeric($v)) {
+            return (float)$v;
+        }
+
+        // Dernier recours: extraction "1.234", "123"
+        $v2 = filter_var($v, FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION | FILTER_FLAG_ALLOW_SCIENTIFIC);
+        return $v2 === '' ? null : (float)$v2;
     }
+
 
 }
