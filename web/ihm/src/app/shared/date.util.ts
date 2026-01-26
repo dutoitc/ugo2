@@ -19,7 +19,12 @@ export function toZurichDate(dbUtc: string | null | undefined): string {
       iso = dbUtc.replace(' ', 'T') + 'Z';
     }
     const dt = new Date(iso);
-    return dt.toLocaleDateString('fr-CH', { timeZone: 'Europe/Zurich' });
+     return dt.toLocaleDateString('fr-CH', {
+      timeZone: 'Europe/Zurich',
+      year: '2-digit',
+      month: '2-digit',
+      day: '2-digit',
+    });
   } catch { return dbUtc ?? '—'; }
 }
 

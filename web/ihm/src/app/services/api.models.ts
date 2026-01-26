@@ -19,6 +19,10 @@ export interface VideoListItem {
   total_watch_seconds_sum?: number | string | null;
   avg_watch_ratio_est?: number | string | null;
   watch_equivalent_sum?: number | string | null;
+  trend?: {
+    slope: number;
+    stars: number;
+  };
 }
 
 export interface VideoListSum {

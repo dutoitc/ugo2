@@ -5,9 +5,11 @@
   border-radius:8px;
 }
 
+/*
 .col-date{ width: 12%; }
 .col-title{ width: 40%; }
 .col-small{ width: 10%; }
+*/
 
 /* centrage global table + exceptions */
 .table-center th,
@@ -40,7 +42,8 @@
   border-collapse: separate;
   border-spacing: 0;
   border: 1px solid var(--ugo-border-strong);
-  background: var(--ugo-card);
+  /*background: var(--ugo-card);*/
+  background-color: yellow;
   color: var(--ugo-text);
   font-size: .95rem;
 }
@@ -129,20 +132,15 @@
   .title a { color:#0a5bd8; }
 }
 
-/* Largeurs de colonnes (somme ~100%) */
-.ugo-table col.col-date  { width: 11%; }
-.ugo-table col.col-title { width: 42%; }
-.ugo-table col.col-num   { width: 6%;  }
-.ugo-table col.col-num-md{ width: 7%;  }
-.ugo-table col.col-last  { width: 3%;  }
 
 /* Titre : meilleure répartition & retour à la ligne harmonieux */
+/*
 .title a{
   display:inline-block;
   max-width: none;
   word-break: break-word;
   text-wrap: balance;
-}
+}*/
 
 .bgyellow { background: #fff6d6; }
 .bggreen { background: #e7f6e7; }
@@ -152,4 +150,32 @@
   font-size: 14px;
   font-style: italic;
   font-weight: 400;
+}
+
+.stars {
+  margin-left: 4px;
+  color: gold;
+  font-size: 1.2em;
+}
+
+.delta {
+  margin-left: 4px;
+  color: #666;
+  font-size: 0.85em;
+}
+
+
+/* @keep */
+@media (max-width: 640px) {
+  .ugo-table col.col-title {
+    width: auto !important;
+  }
+
+  
+.stars {
+  margin-left: 2px;
+  color: gold;
+  font-size: 0.8em;
+}
+
 }

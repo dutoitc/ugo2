@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, ViewEncapsulation } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { toZurichDate, n } from '../shared/date.util';
@@ -9,12 +9,13 @@ import { VideoListItem } from '../services/api.models';
 // Types locaux pour l'UI
 type Platform = 'YOUTUBE' | 'FACEBOOK' | 'INSTAGRAM' | 'TIKTOK' | 'SUM';
 type SortKey =
-  | 'views_desc' | 'published_desc' | 'published_asc'
+  | 'views_desc' | 'views_asc' | 'published_desc' | 'published_asc'
   | 'engagement_desc' | 'watch_eq_desc'
   | 'title_asc' | 'title_desc';
 
 @Component({
   standalone: true,
+  encapsulation: ViewEncapsulation.None,
   selector: 'app-video-list',
   imports: [CommonModule, FormsModule],
   templateUrl: './video-list.component.html',
@@ -71,6 +72,11 @@ export class VideoListComponent {
 
   async toggleDateSort() {
     this.sort = this.sort === 'published_desc' ? 'published_asc' : 'published_desc';
+    await this.reload();
+  }
+
+  async toggleViewsSort() {
+    this.sort = this.sort === 'views_desc' ? 'views_asc' : 'views_desc';
     await this.reload();
   }
 

@@ -6,6 +6,9 @@ namespace Web\Controllers;
 use Web\Auth;
 use Web\Db;
 use Web\Lib\Http;
+use Web\Controllers\Videos\VideosListRequestFactory;
+use Web\Controllers\Videos\VideosRepository;
+
 
 final class VideosController
 {
@@ -33,150 +36,21 @@ final class VideosController
      */
     public function list(): void
     {
-        $pdo = $this->pdo();
+        $q = VideosListRequestFactory::fromGet($_GET);
 
-        $page = max(1, (int)($_GET['page'] ?? 1));
-        $size = (int)($_GET['size'] ?? 20);
-        if ($size < 1)   $size = 20;
-        $offset = ($page - 1) * $size;
-
-        $q        = isset($_GET['q']) ? trim((string)$_GET['q']) : null;
-        $platform = isset($_GET['platform']) ? strtoupper(trim((string)$_GET['platform'])) : null;
-        $format   = isset($_GET['format']) ? strtoupper(trim((string)$_GET['format'])) : null;
-
-        $from = isset($_GET['from']) ? trim((string)$_GET['from']) : null;
-        $to   = isset($_GET['to'])   ? trim((string)$_GET['to'])   : null;
-
-        $sort = isset($_GET['sort']) ? trim((string)$_GET['sort']) : 'views_desc';
-
-        // WHERE dynamiques
-        $where = [];
-        $args  = [];
-
-        if ($q !== null && $q !== '') {
-            $where[] = '(v.video_title LIKE ? OR v.slug LIKE ?)';
-            $args[] = '%' . $q . '%';
-            $args[] = '%' . $q . '%';
-        }
-
-        if ($from) { $where[] = 'v.video_published_at >= ?'; $args[] = $from; }
-        if ($to)   { $where[] = 'v.video_published_at <  ?'; $args[] = $to;   }
-
-        if ($platform) {
-            switch ($platform) {
-                case 'YOUTUBE':  $where[] = '(v.views_yt IS NOT NULL AND v.views_yt > 0)'; break;
-                case 'FACEBOOK': $where[] = '(v.views_fb IS NOT NULL AND v.views_fb > 0)'; break;
-                case 'INSTAGRAM':$where[] = '(v.views_ig IS NOT NULL AND v.views_ig > 0)'; break;
-                case 'TIKTOK':   $where[] = '(v.views_tt IS NOT NULL AND v.views_tt > 0)'; break;
-                default: /* ignore */;
-            }
-        }
-
-        if ($format && in_array($format, ['VIDEO','SHORT','REEL'], true)) {
-            $where[] = 'EXISTS (SELECT 1 FROM source_video sv WHERE sv.video_id = v.video_id AND sv.platform_format = ?)';
-            $args[] = $format;
-        }
-
-        $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
-
-        // Tri (NULLS LAST compatible MySQL/MariaDB)
-        $orderBy = match ($sort) {
-            'published_desc' => 'v.video_published_at DESC, v.video_id DESC',
-            'published_asc'  => 'v.video_published_at ASC,  v.video_id ASC',
-            'engagement_desc'=> '(v.engagement_rate_sum IS NULL) ASC, v.engagement_rate_sum DESC, v.views_native_sum DESC',
-            'watch_eq_desc'  => '(v.watch_equivalent_sum IS NULL) ASC, v.watch_equivalent_sum DESC, v.views_native_sum DESC',
-            'title_asc'      => 'v.video_title ASC,  v.video_id DESC',
-            'title_desc'     => 'v.video_title DESC, v.video_id DESC',
-            default          => 'v.views_native_sum DESC, v.video_published_at DESC'
-        };
-
-        // Count
-        $sqlCount = "SELECT COUNT(*) FROM v_video_latest_rollup v $whereSql";
-        $stCount = $pdo->prepare($sqlCount);
-        $stCount->execute($args);
-        $total = (int)$stCount->fetchColumn();
-
-        // Page (tout en positionnel: LIMIT ? OFFSET ?)
-        // Ajout MINIMAL: calcul de last_snapshot_at via sous-requête corrélée
-        $sql = "
-            SELECT
-              v.video_id, v.slug, v.video_title, v.video_published_at, v.canonical_length_seconds,
-              v.views_native_sum, v.likes_sum, v.comments_sum, v.shares_sum,
-              v.total_watch_seconds_sum, v.avg_watch_ratio_est, v.watch_equivalent_sum, v.engagement_rate_sum,
-              v.views_yt, v.views_fb, v.views_ig, v.views_tt,
-              (
-                SELECT MAX(ms.created_at)
-                FROM source_video sv2
-                JOIN metric_snapshot ms ON ms.source_video_id = sv2.id
-                WHERE sv2.video_id = v.video_id
-              ) AS last_snapshot_at
-            FROM v_video_latest_rollup v
-            $whereSql
-            ORDER BY $orderBy
-            LIMIT ? OFFSET ?
-        ";
-        $st = $pdo->prepare($sql);
-        $execArgs = array_merge($args, [$size, $offset]);
-        $st->execute($execArgs);
-
-        $items = [];
-        while ($row = $st->fetch(\PDO::FETCH_ASSOC)) {
-            $items[] = [
-                'id'         => (int)$row['video_id'],
-                'slug'       => $row['slug'],
-                'title'      => $row['video_title'],
-                'published_at' => $row['video_published_at'],
-                'length_seconds' => $row['canonical_length_seconds'] !== null ? (int)$row['canonical_length_seconds'] : null,
-
-                'views_native_sum' => $row['views_native_sum'] !== null ? (int)$row['views_native_sum'] : null,
-                'likes_sum'        => $row['likes_sum']        !== null ? (int)$row['likes_sum']        : null,
-                'comments_sum'     => $row['comments_sum']     !== null ? (int)$row['comments_sum']     : null,
-                'shares_sum'       => $row['shares_sum']       !== null ? (int)$row['shares_sum']       : null,
-
-                'total_watch_seconds_sum' => $row['total_watch_seconds_sum'] !== null ? (int)$row['total_watch_seconds_sum'] : null,
-                'avg_watch_ratio_est'     => $row['avg_watch_ratio_est'] !== null ? (float)$row['avg_watch_ratio_est'] : null,
-                'watch_equivalent_sum'    => $row['watch_equivalent_sum'] !== null ? (float)$row['watch_equivalent_sum'] : null,
-                'engagement_rate_sum'     => $row['engagement_rate_sum'] !== null ? (float)$row['engagement_rate_sum'] : null,
-
-                'by_platform' => [
-                    'YOUTUBE'  => $row['views_yt'] !== null ? (int)$row['views_yt'] : 0,
-                    'FACEBOOK' => $row['views_fb'] !== null ? (int)$row['views_fb'] : 0,
-                    'INSTAGRAM'=> $row['views_ig'] !== null ? (int)$row['views_ig'] : 0,
-                    'TIKTOK'   => $row['views_tt'] !== null ? (int)$row['views_tt'] : 0,
-                ],
-
-                // Ajout minimal requis par l’IHM Étape 2
-                'last_snapshot_at' => $row['last_snapshot_at'],
-            ];
-        }
-
-        // SUM
-        $sqlSum = "
-          SELECT
-            COALESCE(SUM(views_yt),0) AS sum_yt,
-            COALESCE(SUM(views_fb),0) AS sum_fb,
-            COALESCE(SUM(views_ig),0) AS sum_ig,
-            COALESCE(SUM(views_tt),0) AS sum_tt
-          FROM v_video_latest_rollup
-        ";
-        $stSum = $pdo->prepare($sqlSum);
-        $stSum->execute();
-        $row = $stSum->fetch(\PDO::FETCH_ASSOC) ?: ['sum_yt'=>0,'sum_fb'=>0,'sum_ig'=>0,'sum_tt'=>0];
-        $sum = [
-          'youtube'   => (int)$row['sum_yt'],
-          'facebook'  => (int)$row['sum_fb'],
-          'instagram' => (int)$row['sum_ig'],
-          'tiktok'    => (int)$row['sum_tt'],
-        ];
+        $repo = new VideosRepository($this->pdo());
+        $result = $repo->findList($q);
 
         \Web\Lib\Http::json([
-            'page'  => $page,
-            'size'  => $size,
-            'total' => $total,
-            'sum'   => $sum,
-            'items' => $items
+            'page'  => $q->paginator->page,
+            'size'  => $q->paginator->size,
+            'total' => $result['total'],
+            'sum'   => $result['sum'],
+            'items' => $result['items'],
         ], 200);
     }
+
+
 
     /**
      * GET /api/v1/video
