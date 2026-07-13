@@ -22,20 +22,42 @@
 
 <div class="card wide block" *ngIf="latestRows().length">
   <h3>Plateformes (dernier snapshot)</h3>
-  <table>
+  <table class="data">
     <thead>
     <tr>
       <th>Plateforme</th>
       <th>Vues</th>
       <th>Dernier snapshot</th>
+      <th>Stats</th>
       <th class="col-spark">Trend</th>
     </tr>
     </thead>
     <tbody>
     <tr *ngFor="let r of latestRows(); trackBy: trackByPlatform">
-      <td>{{ r.src.platform }}</td>
+      <td><a [href]="buildUrl(r.l)" target="_new">{{ r.src.platform }}</a></td>
       <td>{{ fmtInt(r.l?.views_native || r.l?.views) }}</td>
       <td>{{ toLocal(r.l?.snapshot_at) }}</td>
+      <td>
+        
+        <!-- STATS -->
+        <span class="metrics">
+          <span *ngIf="r.l?.likes !== null">👍 {{ r.l.likes }}</span>
+          <span *ngIf="r.l?.comments !== null">💬 {{ r.l.comments }}</span>
+          <span *ngIf="r.l?.shares !== null">🔁 {{ r.l.shares }}</span>
+          <span *ngIf="r.l?.reactions_like !== null">👍 {{ r.l.reactions_like }}</span>
+          <span *ngIf="r.l?.reactions_love !== null">❤️ {{ r.l.reactions_love }}</span>
+          <span *ngIf="r.l?.reactions_haha !== null">😂 {{ r.l.reactions_haha }}</span>
+          <span *ngIf="r.l?.reactions_wow !== null">😮 {{ r.l.reactions_wow }}</span>
+          <span *ngIf="r.l?.reactions_sad !== null">😢 {{ r.l.reactions_sad }}</span>
+          <span *ngIf="r.l?.reactions_angry !== null">😡 {{ r.l.reactions_angry }}</span>
+          <span *ngIf="r.l?.engagement_rate !== null">
+            💥 {{ r.l.engagement_rate | percent:'1.0-1' }}
+          </span>
+        </span>
+        <!-- /STATS -->
+
+
+      </td>
       <td class="col-spark">
         <app-time-series-chart
           [series]="platformViewsSeries(r.src.platform)"
@@ -56,6 +78,7 @@
       <h4>{{ r.src.platform }}</h4>
       <app-time-series-chart
         [series]="platformViewsSeries(r.src.platform)"
+        [bands]="platformPercentileBands(r.src.platform) || undefined"
         [height]="180"
         [renderer]="'svg'">
       </app-time-series-chart>

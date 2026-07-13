@@ -5,17 +5,19 @@ import { HmsPipe } from '../shared/pipes/hms.pipe';
 import { IntFrPipe } from '../shared/pipes/int-fr.pipe';
 import { LocalDateTimePipe } from '../shared/pipes/local-datetime.pipe';
 import { ApiService } from '../services/api.service';
-import { VideoDetailResponse } from '../services/api.models';
 import { TimeSeriesChartComponent } from './time-series-chart.component';
 import VideoDetailAdapter from '../adapters/video-detail.adapter';
 import { TimeseriesPoint, LatestRowVm, ReactionsRowVm } from '../models/video-detail.vm';
+import { VideoDetailResponse } from '../models';
+import { BackendTimeseriesPoint, VideoTimeseriesResponse } from '../services/api.models'; // adapte l'import
+
 
 @Component({
-standalone: true,
-selector: 'app-video-detail',
-imports: [CommonModule, RouterLink, TimeSeriesChartComponent, HmsPipe, IntFrPipe, LocalDateTimePipe],
-templateUrl: './video-detail.component.html',
-styleUrls: ['./video-detail.component.css'],
+  standalone: true,
+  selector: 'app-video-detail',
+  imports: [CommonModule, RouterLink, TimeSeriesChartComponent, HmsPipe, IntFrPipe, LocalDateTimePipe],
+  templateUrl: './video-detail.component.html',
+  styleUrls: ['./video-detail.component.css'],
 })
 export class VideoDetailComponent implements OnInit, OnDestroy {
 private route = inject(ActivatedRoute);
@@ -25,9 +27,11 @@ readonly data = signal<VideoDetailResponse | null>(null);
 
 private videoId = 0;
 gran: 'hour' | 'day' = 'hour';
-private ts: any | null = null;
+private ts: VideoTimeseriesResponse | null = null;
 private _seriesGlobal: TimeseriesPoint[] | null = null;
 private _seriesByPf = new Map<string, TimeseriesPoint[]>();
+private _bandsByPf = new Map<string, { p25: TimeseriesPoint[]; p75: TimeseriesPoint[]; p10?: TimeseriesPoint[]; p90?: TimeseriesPoint[] }>();
+
 
 
 // TrackBy pour *ngFor
@@ -61,17 +65,70 @@ trackByPlatform(index: number, item: any): string {
   }
 
   private fetchTimeseries(): void {
-    const range = this.gran === 'hour' ? '7d' : '60d';
-    this.api
-      .getVideoTimeseries(this.videoId, { metric: 'views_native', interval: this.gran, range })
-      .subscribe({
-        next: (res: unknown) => {
-          const r: any = res as any;
-          this.ts = (r && typeof r === 'object' && 'timeseries' in r) ? (r as any).timeseries : r || null;
-        },
-        error: (err: unknown) => console.error('[video-detail] getVideoTimeseries failed', err),
+  const range = this.gran === 'hour' ? undefined : '180d';
+
+  this.api.getVideoTimeseries(this.videoId, {
+    metric: 'views_native',
+    interval: this.gran,
+    ...(range ? { range } : {}),
+    include: 'percentiles',
+  }).subscribe({
+    next: (res) => {
+      this.ts = res;
+
+      // séries
+      this._seriesGlobal = this.toSeries(res.timeseries.views);
+      this._seriesByPf.clear();
+      Object.keys(res.timeseries || {}).forEach(k => {
+        if (k !== 'views') this._seriesByPf.set(k.toUpperCase(), this.toSeries((res as any).timeseries[k]));
       });
-  }
+
+      // bands (cache)
+      this._bandsByPf.clear();
+      const per = (res as any).percentiles || {};
+      for (const pf of this._seriesByPf.keys()) {
+        const p = per[pf];
+        const base = this._seriesByPf.get(pf) || [];
+        const b = this.buildBandsAligned(base, p);
+        if (b) {
+          console.debug('Bands built for', pf, b);
+          this._bandsByPf.set(pf, b);
+        }
+      }
+    },
+    error: (err) => console.error('[video-detail] getVideoTimeseries failed', err),
+  });
+}
+
+
+// aligne les percentiles sur les timestamps de la série (forward-fill)
+private buildBandsAligned(
+  base: TimeseriesPoint[],
+  p: any
+): { p25: TimeseriesPoint[]; p75: TimeseriesPoint[]; p10?: TimeseriesPoint[]; p90?: TimeseriesPoint[] } | null {
+  if (!p || !base.length) return null;
+
+  const p25 = this.alignByTimeCarry(base, this.toSeries(p.p25));
+  const p75 = this.alignByTimeCarry(base, this.toSeries(p.p75));
+  const p10 = p.p10 ? this.alignByTimeCarry(base, this.toSeries(p.p10)) : undefined;
+  const p90 = p.p90 ? this.alignByTimeCarry(base, this.toSeries(p.p90)) : undefined;
+
+  if (!p25.length || !p75.length) return null;
+  return { p25, p75, p10, p90 };
+}
+
+private alignByTimeCarry(base: TimeseriesPoint[], band: TimeseriesPoint[]): TimeseriesPoint[] {
+  if (!base.length || !band.length) return [];
+  const m = new Map<number, number>(band.map(p => [p[0], p[1]]));
+  let last = 0;
+  return base.map(([t]) => {
+    if (m.has(t)) last = m.get(t)!;
+    return [t, last] as TimeseriesPoint;
+  });
+}
+
+
+
 
   // ================= Helpers & KPI =================
 
@@ -165,24 +222,6 @@ private parseHmsToSeconds(x: unknown): number {
 
   private parseSeries(input: any): TimeseriesPoint[] {
     return VideoDetailAdapter.parseSeries(input);
-  }
-
-  globalViewsSeries(): TimeseriesPoint[] {
-    if (!this._seriesGlobal) {
-      const raw = this.ts?.views ?? this.ts?.timeseries?.views ?? this.ts;
-      this._seriesGlobal = VideoDetailAdapter.toSeriesGlobal(raw);
-    }
-    return this._seriesGlobal;
-  }
-
-  platformViewsSeries(pf: string | null | undefined): TimeseriesPoint[] {
-    const key = String(pf || '').toUpperCase();
-    let s = this._seriesByPf.get(key);
-    if (!s) {
-      s = VideoDetailAdapter.toSeriesByPlatform(this.ts, key);
-      this._seriesByPf.set(key, s);
-    }
-    return s;
   }
 
 
@@ -343,5 +382,57 @@ rollWatchEqSeconds(): number {
 
   return Math.max(0, Math.round(total));
 }
+
+
+
+globalViewsSeries(): TimeseriesPoint[] {
+  if (!this._seriesGlobal) {
+    const raw = this.ts?.timeseries.views ?? [];
+    this._seriesGlobal = this.toSeries(raw);
+  }
+  return this._seriesGlobal;
+}
+
+
+platformViewsSeries(pf: string): TimeseriesPoint[] {
+  return this._seriesByPf.get((pf || '').toUpperCase()) ?? [];
+}
+
+platformPercentileBands(pf: string) {
+  return this._bandsByPf.get((pf || '').toUpperCase()) ?? null;
+}
+
+
+private parseBackendTsToMs(s: string): number {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/.exec(s);
+  if (!m) return NaN;
+  const [_, yy, mo, dd, hh, mi, ss, ms] = m;
+  return Date.UTC(
+    Number(yy),
+    Number(mo) - 1,
+    Number(dd),
+    Number(hh),
+    Number(mi),
+    Number(ss),
+    Number(ms ?? 0)
+  );
+}
+
+private toSeries(raw: BackendTimeseriesPoint[] | null | undefined): TimeseriesPoint[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(p => [this.parseBackendTsToMs(p.ts), Number(p.value ?? 0)] as TimeseriesPoint)
+    .filter(pt => Number.isFinite(pt[0]) && Number.isFinite(pt[1]))
+    .sort((a,b) => a[0] - b[0]);
+}
+
+
+public buildUrl(o:any): String {
+  if (o?.platform == 'FACEBOOK') {
+    return 'https://www.facebook.com' + o?.url;
+  }
+  return o?.url;
+}
+
 
 }

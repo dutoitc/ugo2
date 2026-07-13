@@ -9,6 +9,7 @@ require_once __DIR__ . '/Util.php';
 
 // Helpers & contrôleurs
 require_once __DIR__ . '/lib/Http.php';
+require_once __DIR__ . '/controllers/sql/MaterializedViewsSql.php';
 require_once __DIR__ . '/controllers/videos/Paginator.php';
 require_once __DIR__ . '/controllers/videos/Sorts.php';
 require_once __DIR__ . '/controllers/videos/VideosListQuery.php';

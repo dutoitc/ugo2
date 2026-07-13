@@ -1,3 +1,5 @@
+import { TimeseriesPoint } from "../models/video-detail.vm";
+
 export interface VideoListItem {
   id: number;
   slug?: string | null;
@@ -161,4 +163,34 @@ export interface DuplicateItem {
     duration_seconds: number | null;
   };
 }
+
+export interface PercentileBands {
+  p10?: BackendTimeseriesPoint[];
+  p25: BackendTimeseriesPoint[];
+  p50?: BackendTimeseriesPoint[];
+  p75: BackendTimeseriesPoint[];
+  p90?: BackendTimeseriesPoint[];
+  count_videos: number;
+}
+
+export interface VideoTimeseriesResponse {
+  timeseries: {
+    views: BackendTimeseriesPoint[];
+    [platform: string]: BackendTimeseriesPoint[];
+  };
+  percentiles?: {
+    [platform: string]: PercentileBands;
+  };
+  granularity: 'hour' | 'day';
+  metric: string;
+  from: string;
+  to: string;
+}
+
+
+export interface BackendTimeseriesPoint {
+  ts: string;     // "YYYY-MM-DD HH:mm:ss.SSS"
+  value: number;
+}
+
 

@@ -14,22 +14,9 @@ final class VideoTimeseriesController
 {
     public function __construct(private Db $db, private Auth $auth) {}
 
-    /**
-     * GET /api/v1/video/{id}/timeseries
-     * Params (query, optionnels):
-     * - metric: views_native | likes | comments | shares | total_watch_seconds (def=views_native)
-     * - interval: hour | day (def=hour)
-     * - range: "24h" | "7d" | "30d" ... (def=7d)
-     * - platforms: CSV ex "FACEBOOK,YOUTUBE" (def=toutes)
-     * - agg: sum | cumsum (def=sum)   // cumsum = cumul sur les buckets
-     * - limit: entier (>0) pour downsampling (def: 0 = désactivé)
-     *
-     * NB: Pour des compteurs cumulés on agrège intra-bucket par MAX (par plateforme),
-     * puis on somme entre plateformes pour la série globale.
-     */
     public function timeseries(): void
     {
-        // $this->auth->assertApiKeyRead(); // activer si nécessaire
+        // $this->auth->assertApiKeyRead();
 
         $videoId = (int)($_GET['id'] ?? 0);
         if ($videoId <= 0) {
@@ -46,21 +33,19 @@ final class VideoTimeseriesController
         $metric     = $this->pickMetric((string)($_GET['metric'] ?? 'views_native'));
         $interval   = $this->pickInterval((string)($_GET['interval'] ?? 'hour'));
         $agg        = $this->pickAgg((string)($_GET['agg'] ?? 'sum'));
-        $rangeStr   = (string)($_GET['range'] ?? '7d');
+        $rangeStr   = (string)($_GET['range'] ?? 'all');
         $platforms  = isset($_GET['platforms']) && trim((string)$_GET['platforms']) !== ''
-                        ? $this->sanitizePlatformsCsv((string)$_GET['platforms'])
-                        : null;
+            ? $this->sanitizePlatformsCsv((string)$_GET['platforms'])
+            : null;
         $limit      = isset($_GET['limit']) ? max(0, (int)$_GET['limit']) : 0;
 
-        [$fromUtc, $fromStr] = $this->computeFromUtc($rangeStr);
-        $toStr = $this->nowUtcStr();
+        $fromStr = $this->computeFromStr($videoId, $rangeStr);
+        $toStr   = $this->nowUtcStr();
 
-        // Bucket de temps (UTC)
         $tsExpr = $interval === 'day'
             ? "DATE_FORMAT(ms.snapshot_at, '%Y-%m-%d 00:00:00.000')"
             : "DATE_FORMAT(ms.snapshot_at, '%Y-%m-%d %H:00:00.000')";
 
-        // Métrique (whitelist)
         $metricExpr = match ($metric) {
             'views_native'        => 'COALESCE(ms.views_native,0)',
             'likes'               => 'COALESCE(ms.likes,0)',
@@ -70,16 +55,14 @@ final class VideoTimeseriesController
             default               => 'COALESCE(ms.views_native,0)',
         };
 
-        // 1) Série par plateforme = MAX intra-bucket
-        $byPlatform = $this->fetchByPlatformMaxPerBucket($videoId, $fromStr, $tsExpr, $metricExpr, $platforms);
+        // ✅ IMPORTANT: on borne aussi par "to"
+        $byPlatform = $this->fetchByPlatformMaxPerBucket(
+            $videoId, $fromStr, $toStr, $tsExpr, $metricExpr, $platforms
+        );
 
-        // 2) Série globale = somme des MAX par ts
         $global = $this->sumPlatformsPerBucket($byPlatform);
-
-        // Logs pour enquête collecte (non-monotonicité par plateforme)
         $this->warnIfNonMonotonic($byPlatform);
 
-        // 3) Agg cumsum (optionnel)
         if ($agg === 'cumsum') {
             $global = $this->cumsum($global);
             foreach ($byPlatform as $p => $rows) {
@@ -87,7 +70,6 @@ final class VideoTimeseriesController
             }
         }
 
-        // 4) Downsampling (optionnel)
         if ($limit > 0) {
             $global = $this->downsample($global, $limit);
             foreach ($byPlatform as $p => $rows) {
@@ -95,20 +77,52 @@ final class VideoTimeseriesController
             }
         }
 
-        // 5) Sortie au format existant
+        $messages = [];
+        $messages[] = "range=$rangeStr";
+        $messages[] = "interval=$interval";
+        $messages[] = "metric=$metric";
+        $messages[] = "from=$fromStr";
+        $messages[] = "to=$toStr";
+        $messages[] = "platforms=" . ($platforms ?? 'ALL');
+
         $out = [
-            'timeseries'  => [
-                'views' => array_map(static fn($r) => ['ts' => (string)$r['ts'], 'value' => (int)$r['value']], $global),
+            'timeseries' => [
+                'views' => array_map(
+                    static fn($r) => ['ts' => (string)$r['ts'], 'value' => (int)$r['value']],
+                    $global
+                ),
             ],
             'granularity' => $interval,
             'metric'      => $metric,
             'from'        => $fromStr,
             'to'          => $toStr,
+            'message'     => implode(' | ', $messages),
         ];
+
         foreach ($byPlatform as $platform => $rows) {
             $out['timeseries'][$platform] = array_map(
                 static fn($r) => ['ts' => (string)$r['ts'], 'value' => (int)$r['value']],
                 $rows
+            );
+        }
+
+        $include = (string)($_GET['include'] ?? '');
+
+        if ($metric === 'views_native' && str_contains($include, 'percentiles')) {
+            // ✅ cap percentiles à la durée réellement affichée (par plateforme)
+            $publishedAt = $this->fetchVideoPublishedAt($videoId);
+            $t0Aligned = $publishedAt ? $this->alignT0($publishedAt, $interval) : null;
+
+            $maxBuckets = $t0Aligned
+                ? $this->computeMaxBucketsFromTimeseries($t0Aligned, $interval, $byPlatform)
+                : [];
+
+            $out['percentiles'] = $this->fetchPercentileBands(
+                $videoId,
+                $interval,
+                $platforms,
+                $t0Aligned,
+                $maxBuckets
             );
         }
 
@@ -124,13 +138,11 @@ final class VideoTimeseriesController
     }
 
     private function pickInterval(string $i): string {
-        $i = strtolower($i);
-        return $i === 'day' ? 'day' : 'hour';
+        return strtolower($i) === 'day' ? 'day' : 'hour';
     }
 
     private function pickAgg(string $a): string {
-        $a = strtolower($a);
-        return $a === 'cumsum' ? 'cumsum' : 'sum';
+        return strtolower($a) === 'cumsum' ? 'cumsum' : 'sum';
     }
 
     private function sanitizePlatformsCsv(string $csv): string {
@@ -138,17 +150,32 @@ final class VideoTimeseriesController
             static fn($x) => strtoupper(trim(preg_replace('/[^A-Z0-9_,]/i', '', $x))),
             explode(',', $csv)
         ));
-        $parts = array_values(array_unique($parts));
-        return implode(',', $parts);
+        return implode(',', array_values(array_unique($parts)));
     }
 
-    /** @return array{0:DateTimeImmutable,1:string} 'Y-m-d H:i:s.000' UTC */
+    private function computeFromStr(int $videoId, string $range): string
+    {
+        $range = strtolower(trim($range));
+
+        if ($range === '' || $range === 'all' || $range === 'full') {
+            $publishedAt = $this->fetchVideoPublishedAt($videoId);
+            if ($publishedAt !== null) {
+                return $publishedAt;
+            }
+        }
+
+        [, $fromStr] = $this->computeFromUtc($range);
+        return $fromStr;
+    }
+
+    /** @return array{0:DateTimeImmutable,1:string} */
     private function computeFromUtc(string $range): array {
         $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
         if (preg_match('/^(\d+)([hd])$/i', $range, $m)) {
             $n = (int)$m[1];
-            $u = strtolower($m[2]);
-            $from = $u === 'h' ? $now->modify("-{$n} hours") : $now->modify("-{$n} days");
+            $from = strtolower($m[2]) === 'h'
+                ? $now->modify("-{$n} hours")
+                : $now->modify("-{$n} days");
         } else {
             $from = $now->modify('-7 days');
         }
@@ -156,86 +183,102 @@ final class VideoTimeseriesController
     }
 
     private function nowUtcStr(): string {
-        $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
-        return $now->format('Y-m-d H:i:s') . '.000';
+        return (new DateTimeImmutable('now', new DateTimeZone('UTC')))
+            ->format('Y-m-d H:i:s') . '.000';
     }
 
-    /**
-     * Par plateforme: MAX intra-bucket (ts), trié ASC.
-     * @return array<string, array<int,array{ts:string,value:int}>>
-     */
+    private function fetchVideoPublishedAt(int $videoId): ?string
+    {
+        $pdo = $this->db->pdo();
+        $st = $pdo->prepare("
+            SELECT published_at
+            FROM video
+            WHERE id = :vid
+            LIMIT 1
+        ");
+        $st->bindValue(':vid', $videoId, PDO::PARAM_INT);
+        $st->execute();
+
+        $v = $st->fetchColumn();
+        if (!$v) return null;
+
+        return str_contains((string)$v, '.') ? (string)$v : ((string)$v . '.000');
+    }
+
     private function fetchByPlatformMaxPerBucket(
         int $videoId,
         string $fromStr,
+        string $toStr,
         string $tsExpr,
         string $metricExpr,
         ?string $platformsCsv
     ): array {
         $pdo = $this->db->pdo();
         $wherePlatforms = $platformsCsv ? " AND FIND_IN_SET(sv.platform, :platforms) > 0" : "";
+
+        // ✅ borne haute ajoutée: ms.snapshot_at <= :toTs
         $sql = "
             SELECT t.platform, t.ts, t.value
             FROM (
-                SELECT sv.platform AS platform,
+                SELECT sv.platform,
                        {$tsExpr} AS ts,
                        MAX({$metricExpr}) AS value
                 FROM metric_snapshot ms
                 JOIN source_video sv ON sv.id = ms.source_video_id
                 WHERE sv.video_id = :vid
                   AND ms.snapshot_at >= :fromTs
+                  AND ms.snapshot_at <= :toTs
                   {$wherePlatforms}
                 GROUP BY sv.platform, ts
             ) t
             ORDER BY t.platform, t.ts
         ";
+
         $st = $pdo->prepare($sql);
         $st->bindValue(':vid', $videoId, PDO::PARAM_INT);
         $st->bindValue(':fromTs', $fromStr, PDO::PARAM_STR);
+        $st->bindValue(':toTs', $toStr, PDO::PARAM_STR);
         if ($platformsCsv) $st->bindValue(':platforms', $platformsCsv, PDO::PARAM_STR);
         $st->execute();
 
         $out = [];
         while ($row = $st->fetch(PDO::FETCH_ASSOC)) {
-            $p = (string)($row['platform'] ?? 'UNKNOWN');
-            $out[$p] ??= [];
+            $p = (string)$row['platform'];
             $out[$p][] = [
                 'ts'    => (string)$row['ts'],
-                'value' => (int)($row['value'] ?? 0),
+                'value' => (int)$row['value'],
             ];
         }
         return $out;
     }
 
-    /**
-     * Global = somme des MAX par plateforme pour chaque ts, trié ASC.
-     * @param array<string, array<int,array{ts:string,value:int}>> $byPlatform
-     * @return array<int,array{ts:string,value:int}>
-     */
     private function sumPlatformsPerBucket(array $byPlatform): array
     {
-        // Collecte et union des timestamps
-        $bucketSet = [];
-        foreach ($byPlatform as $rows) {
-            foreach ($rows as $r) $bucketSet[$r['ts']] = true;
+        $buckets = [];
+        $index   = [];
+
+        foreach ($byPlatform as $p => $rows) {
+            foreach ($rows as $r) {
+                $ts = $r['ts'];
+                $buckets[$ts] = true;
+                $index[$p][$ts] = (int)$r['value'];
+            }
         }
-        $buckets = array_keys($bucketSet);
-        sort($buckets);
+
+        $tsList = array_keys($buckets);
+        sort($tsList);
 
         $out = [];
-        foreach ($buckets as $ts) {
+        foreach ($tsList as $ts) {
             $sum = 0;
-            foreach ($byPlatform as $rows) {
-                // recherche rapide: dernier point de ce ts (les tableaux sont petits → boucle)
-                foreach ($rows as $r) {
-                    if ($r['ts'] === $ts) { $sum += (int)$r['value']; break; }
-                }
+            foreach ($index as $map) {
+                $sum += $map[$ts] ?? 0;
             }
             $out[] = ['ts' => $ts, 'value' => $sum];
         }
         return $out;
     }
 
-    /** Cumul croissant (points triés ASC) */
     private function cumsum(array $points): array {
         $sum = 0;
         foreach ($points as &$p) {
@@ -245,28 +288,18 @@ final class VideoTimeseriesController
         return $points;
     }
 
-    /**
-     * Downsample simple: conserve ~limit points espacés uniformément.
-     * @param array<int,array{ts:string,value:int}> $points
-     */
     private function downsample(array $points, int $limit): array {
         $n = count($points);
         if ($limit <= 0 || $n <= $limit) return $points;
         $step = (int)ceil($n / $limit);
         $out = [];
-        for ($i = 0; $i < $n; $i += $step) {
-            $out[] = $points[$i];
-        }
+        for ($i = 0; $i < $n; $i += $step) $out[] = $points[$i];
         if ($out && $out[count($out)-1]['ts'] !== $points[$n-1]['ts']) {
             $out[] = $points[$n-1];
         }
         return $out;
     }
 
-    /**
-     * Log d'aide au debug collecte : si une plateforme décroit dans le temps,
-     * on l'indique dans les logs pour investigation côté batch.
-     */
     private function warnIfNonMonotonic(array $byPlatform): void
     {
         foreach ($byPlatform as $platform => $rows) {
@@ -278,10 +311,116 @@ final class VideoTimeseriesController
                         '[API] WARN non_monotonic platform=%s ts=%s prev=%d cur=%d',
                         $platform, $r['ts'], $prev, $v
                     ));
-                    break; // un log par plateforme suffit
+                    break;
                 }
                 $prev = $v;
             }
         }
+    }
+
+    private function alignT0(string $publishedAt, string $granularity): DateTimeImmutable
+    {
+        $t0 = new DateTimeImmutable($publishedAt, new DateTimeZone('UTC'));
+        if ($granularity === 'day') {
+            return $t0->setTime(0, 0, 0);
+        }
+        // hour
+        return $t0->setTime((int)$t0->format('H'), 0, 0);
+    }
+
+    /** @return array<string,int> platform => max age_bucket */
+    private function computeMaxBucketsFromTimeseries(
+        DateTimeImmutable $t0Aligned,
+        string $granularity,
+        array $byPlatform
+    ): array {
+        $out = [];
+        foreach ($byPlatform as $platform => $rows) {
+            if (empty($rows)) continue;
+            $lastTsStr = (string)end($rows)['ts'];
+            $tLast = new DateTimeImmutable($lastTsStr, new DateTimeZone('UTC'));
+
+            if ($granularity === 'day') {
+                $days = (int)$t0Aligned->diff($tLast)->days;
+                $out[$platform] = max(0, $days);
+            } else {
+                $hours = (int)floor(($tLast->getTimestamp() - $t0Aligned->getTimestamp()) / 3600);
+                $out[$platform] = max(0, $hours);
+            }
+        }
+        return $out;
+    }
+
+    private function fetchPercentileBands(
+        int $videoId,
+        string $granularity,
+        ?string $platformsCsv,
+        ?DateTimeImmutable $t0Aligned,
+        array $maxBuckets
+    ): array {
+        if ($t0Aligned === null) {
+            return [];
+        }
+
+        $pdo = $this->db->pdo();
+
+        $wherePlatforms = $platformsCsv
+            ? "AND FIND_IN_SET(p.source, :platforms) > 0"
+            : "";
+
+        $sql = "
+            SELECT
+                p.source,
+                p.age_bucket,
+                p.p10_views,
+                p.p25_views,
+                p.p50_views,
+                p.p75_views,
+                p.p90_views,
+                p.count_videos
+            FROM mv_video_views_percentiles p
+            WHERE p.granularity = :granularity
+            {$wherePlatforms}
+            ORDER BY p.source, p.age_bucket
+        ";
+
+        $st = $pdo->prepare($sql);
+        $st->bindValue(':granularity', $granularity);
+        if ($platformsCsv) {
+            $st->bindValue(':platforms', $platformsCsv);
+        }
+        $st->execute();
+
+        $out = [];
+
+        while ($row = $st->fetch(PDO::FETCH_ASSOC)) {
+            $source = (string)$row['source'];
+            $bucket = (int)$row['age_bucket'];
+
+            // ✅ stoppe exactement au dernier bucket réellement mesuré
+            if (!isset($maxBuckets[$source]) || $bucket > $maxBuckets[$source]) {
+                continue;
+            }
+
+            $ts = $granularity === 'day'
+                ? $t0Aligned->modify("+{$bucket} days")
+                : $t0Aligned->modify("+{$bucket} hours");
+
+            $tsStr = $ts->format('Y-m-d H:i:s') . '.000';
+
+            $out[$source]['count_videos'] = (int)$row['count_videos'];
+
+            foreach (['p10','p25','p50','p75','p90'] as $p) {
+                $col = $p . '_views';
+                if ($row[$col] !== null) {
+                    $out[$source][$p][] = [
+                        'ts'    => $tsStr,
+                        'value' => (int)$row[$col]
+                    ];
+                }
+            }
+        }
+
+        return $out;
     }
 }

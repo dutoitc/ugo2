@@ -109,7 +109,7 @@ final class VideosController
         }
 
         // Rollup (dernier état agrégé pour la vidéo)
-        $st = $pdo->prepare('SELECT * FROM v_video_latest_rollup WHERE video_id = ?');
+        $st = $pdo->prepare('SELECT * FROM mv_video_rollup WHERE video_id = ?');
         $st->execute([$id]);
         $roll = $st->fetch(\PDO::FETCH_ASSOC);
 
@@ -282,5 +282,34 @@ final class VideosController
             \Web\Lib\Http::json(['error' => 'db_error', 'message' => $e->getMessage()], 500);
         }
     }
+
+    public function refreshMV(): void {
+        $pdo = $this->pdo();
+        $repo = new VideosRepository($pdo);
+        $repo->refreshMaterializedViews();
+        \Web\Lib\Http::json(['ok' => true], 200);
+    }
+
+
+    public function refreshVideoTimeSeries(): void {
+        $pdo = $this->pdo();
+        $repo = new VideosRepository($pdo);
+        try {
+            $repo->refreshVideoTimeSeries();
+            Http::json(['ok' => true], 200);
+
+        } catch (\Throwable $e) {
+
+            Http::json([
+                'error' => 'refresh_failed',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+
+
+
 
 }

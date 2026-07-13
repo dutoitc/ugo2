@@ -18,15 +18,21 @@ final class Db {
   }
   public function pdo(): PDO { return $this->pdo; }
 
-  public function tx(callable $fn) {
-    try {
-      $this->pdo->beginTransaction();
-      $res = $fn($this->pdo);
-      $this->pdo->commit();
-      return $res;
-    } catch (\Throwable $e) {
-      if ($this->pdo->inTransaction()) $this->pdo->rollBack();
-      throw $e;
+
+    public function tx(callable $fn) {
+        if ($this->pdo->inTransaction()) {
+            return $fn($this->pdo); // on laisse la transaction parente gérer
+        }
+        try {
+            $this->pdo->beginTransaction();
+            $res = $fn($this->pdo);
+            $this->pdo->commit();
+            return $res;
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+            throw $e;
+        }
     }
-  }
+
+
 }

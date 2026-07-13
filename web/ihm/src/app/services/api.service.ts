@@ -1,7 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { VideoListResponse, VideoDetailResponse, DuplicatesResponse } from '../services/api.models';
+import { VideoListResponse, VideoDetailResponse, DuplicatesResponse, VideoTimeseriesResponse } from '../services/api.models';
+
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -77,27 +78,34 @@ export class ApiService {
   }
 
   // ======================== /video/{id}/timeseries ========================
-  getVideoTimeseries(id: number | string, params?: {
-    metric?: 'views_native' | 'likes' | 'comments' | 'shares' | 'total_watch_seconds';
-    interval?: 'hour' | 'day';
-    range?: string;
-    platforms?: string;     // CSV 'FACEBOOK,YOUTUBE'
-    agg?: 'sum' | 'cumsum';
-    limit?: number;         // >0 => downsample
-  }): Observable<unknown> {
-    const queryParams: { [param: string]: string | number } = {};
+  getVideoTimeseries(
+    id: number | string,
+    params?: {
+      metric?: 'views_native' | 'likes' | 'comments' | 'shares' | 'total_watch_seconds';
+      interval?: 'hour' | 'day';
+      range?: string;
+      platforms?: string;
+      agg?: 'sum' | 'cumsum';
+      limit?: number;
+      include?: 'percentiles';
+    }
+  ): Observable<VideoTimeseriesResponse> {
+    const queryParams: { [k: string]: string | number } = {};
 
     if (params) {
-      if (params.metric) { queryParams['metric'] = params.metric; }
-      if (params.interval) { queryParams['interval'] = params.interval; }
-      if (params.range) { queryParams['range'] = params.range; }
-      if (params.platforms) { queryParams['platforms'] = params.platforms; }
-      if (params.agg) { queryParams['agg'] = params.agg; }
-      if (params.limit != null && params.limit > 0) { queryParams['limit'] = params.limit; }
+      if (params.metric) queryParams['metric'] = params.metric;
+      if (params.interval) queryParams['interval'] = params.interval;
+      if (params.range) queryParams['range'] = params.range;
+      if (params.platforms) queryParams['platforms'] = params.platforms;
+      if (params.agg) queryParams['agg'] = params.agg;
+      if (params.limit) queryParams['limit'] = params.limit;
+      if (params.include) queryParams['include'] = params.include;
     }
 
-    const httpParams = new HttpParams({ fromObject: queryParams });
-    return this.http.get(`${this.base}/video/${id}/timeseries`, { params: httpParams });
+    return this.http.get<VideoTimeseriesResponse>(
+      `${this.base}/video/${id}/timeseries`,
+      { params: new HttpParams({ fromObject: queryParams }) }
+    );
   }
 
   // ======================== /videos/duplicates ========================

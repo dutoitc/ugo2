@@ -45,3 +45,5 @@ t
 /batch/src/main/java/ch/mno/ugo2/facebook/t
 /deploy.sh
 /.idea/uiDesigner.xml
+/batch/src/main/resources/application-capstv.properties
+/batch/src/main/resources/application-xplore.properties

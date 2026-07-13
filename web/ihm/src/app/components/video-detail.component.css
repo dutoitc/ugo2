@@ -68,3 +68,11 @@ button.small.active {
 td.col-spark { width: 120px; vertical-align: middle; }
 td.col-spark app-time-series-chart { display: block; width: 100%; }
 .card { overflow: visible; }
+
+table.data td {
+  border: 1px solid silver;
+}
+
+table.data th {
+  border: 1px solid silver;
+}

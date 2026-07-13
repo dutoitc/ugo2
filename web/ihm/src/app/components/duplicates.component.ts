@@ -14,10 +14,6 @@ import {Subscription}from 'rxjs';
   selector: 'app-duplicates',
   imports: [
     CommonModule,
-    RouterLink,
-    TimeSeriesChartComponent,
-    HmsPipe,
-    IntFrPipe,
     LocalDateTimePipe
   ],
   templateUrl: './duplicates.component.html',

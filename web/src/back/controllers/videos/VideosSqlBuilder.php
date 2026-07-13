@@ -73,7 +73,7 @@ final class VideosSqlBuilder
     public static function sqlCount(VideosListQuery $q): array
     {
         $built = self::buildWhere($q);
-        $sql = "SELECT COUNT(*) FROM v_video_latest_rollup v {$built['whereSql']}";
+        $sql = "SELECT COUNT(*) FROM mv_video_rollup v {$built['whereSql']}";
 
         return [
             'sql'  => $sql,
@@ -90,21 +90,17 @@ final class VideosSqlBuilder
         $orderBy = Sorts::sql($q->sort);
 
         $sql = "
-            SELECT
-              v.video_id, v.slug, v.video_title, v.video_published_at, v.canonical_length_seconds,
-              v.views_native_sum, v.likes_sum, v.comments_sum, v.shares_sum,
-              v.total_watch_seconds_sum, v.avg_watch_ratio_est, v.watch_equivalent_sum, v.engagement_rate_sum,
-              v.views_yt, v.views_fb, v.views_ig, v.views_tt,
-              (
-                SELECT MAX(ms.created_at)
-                FROM source_video sv2
-                JOIN metric_snapshot ms ON ms.source_video_id = sv2.id
-                WHERE sv2.video_id = v.video_id
-              ) AS last_snapshot_at
-            FROM v_video_latest_rollup v
-            {$built['whereSql']}
-            ORDER BY {$orderBy}
-            LIMIT ? OFFSET ?
+          SELECT
+            v.video_id, v.slug, v.video_title, v.video_published_at, v.canonical_length_seconds,
+            v.views_native_sum, v.likes_sum, v.comments_sum, v.shares_sum,
+            v.total_watch_seconds_sum, v.avg_watch_ratio_est, v.watch_equivalent_sum, v.engagement_rate_sum,
+            v.views_yt, v.views_fb, v.views_ig, v.views_tt,
+            ls.last_snapshot_at
+          FROM mv_video_rollup v
+          LEFT JOIN v_video_last_snapshot ls ON ls.video_id = v.video_id
+          {$built['whereSql']}
+          ORDER BY {$orderBy}
+          LIMIT ? OFFSET ?
         ";
 
         $args = $built['args'];
@@ -120,17 +116,18 @@ final class VideosSqlBuilder
     /**
      * @return array{sql:string}
      */
-    public static function sqlSum(): array
+    public static function sqlSum(VideosListQuery $q): array
     {
+        $built = self::buildWhere($q);
         $sql = "
             SELECT
                 COALESCE(SUM(views_yt),0) AS sum_yt,
                 COALESCE(SUM(views_fb),0) AS sum_fb,
                 COALESCE(SUM(views_ig),0) AS sum_ig,
                 COALESCE(SUM(views_tt),0) AS sum_tt
-            FROM v_video_latest_rollup
+            FROM mv_video_rollup v
+            {$built['whereSql']}
         ";
-
-        return ['sql' => $sql];
+        return ['sql'=>$sql, 'args'=>$built['args']];
     }
 }

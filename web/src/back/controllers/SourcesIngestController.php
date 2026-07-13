@@ -6,6 +6,7 @@ namespace Web\Controllers;
 use Web\Db;
 use Web\Auth;
 use Web\Lib\Http;
+use Web\Controllers\Videos\VideosRepository;
 use PDO;
 
 /**
@@ -167,6 +168,10 @@ final class SourcesIngestController
             $aff = $stmt->rowCount();
             if ($aff >= 2) $updated++; else $inserted++;
         }
+
+        // Update views
+        $repo = new VideosRepository($pdo);
+        $repo->refreshMaterializedViews();
 
         Http::json(['ok'=>true,'inserted'=>$inserted,'updated'=>$updated,'skipped'=>$skipped], 200);
     }

@@ -7,6 +7,7 @@ use Web\Db;
 use Web\Auth;
 use Web\Util;
 use Web\Lib\Http;
+use Web\Controllers\Videos\VideosRepository;
 use PDO;
 
 final class ReconcileController
@@ -99,6 +100,11 @@ final class ReconcileController
                 }
             }
         });
+
+
+        // Update views
+        $repo = new VideosRepository($pdo);
+        $repo->refreshMaterializedViews();
 
         Http::json([
             'ok' => true,

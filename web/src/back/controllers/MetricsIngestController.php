@@ -7,6 +7,7 @@ use Web\Auth;
 use Web\Db;
 use Web\Lib\Http;
 use Web\Services\MetricsIngestService;
+use Web\Controllers\Videos\VideosRepository;
 
 final class MetricsIngestController
 {
@@ -93,6 +94,12 @@ final class MetricsIngestController
         $service = new MetricsIngestService($this->db);
         try {
             $result = $service->ingestBatch($norm);
+
+            // Update views
+            $pdo = $this->db->pdo();
+            $repo = new VideosRepository($pdo);
+            $repo->refreshMaterializedViews();
+
             Http::json([
                 'status' => 'ok',
                 'ok'     => $result['ok'],

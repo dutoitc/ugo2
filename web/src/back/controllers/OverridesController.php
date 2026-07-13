@@ -6,6 +6,7 @@ namespace Web\Controllers;
 use Web\Db;
 use Web\Auth;
 use Web\Util;
+use Web\Controllers\Videos\VideosRepository;
 use PDO;
 
 /**
@@ -64,6 +65,10 @@ final class OverridesController
                 $applied++;
             }
         });
+
+        // Update views
+        $repo = new VideosRepository($pdo);
+        $repo->refreshMaterializedViews();
 
         return ['ok' => true, 'createdOverrides' => $applied, 'unknownSources' => $unknown, 'invalid' => $invalid];
     }
