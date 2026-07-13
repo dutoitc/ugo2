@@ -5,6 +5,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.java.Log;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.util.UUID;
+
 @Log
 @Service
 @RequiredArgsConstructor
@@ -15,18 +18,54 @@ public class BatchOrchestrator {
     private final WebApiSinkService webApiSinkService;
 
     /**
-     * Nouvelle règle: batch:run charge TOUT l'historique (pas de fenêtre glissante).
-     * Puis on déclenche la réconciliation côté API sur TOUTES les sources
-     * (from/to non renseignés) avec un "hoursWindow" issu de la config.
+     * Une exécution collecte les plateformes, réconcilie, puis rafraîchit les vues
+     * matérialisées une seule fois en fin de batch.
      */
     public void run() {
-        int pushedSnapshots = discoveryService.discover();
-        log.info(() -> String.format("[batch] discovery done, pushedSnapshots=%d — launching API reconciliation…", pushedSnapshots));
+        String runId = UUID.randomUUID().toString();
+        Instant startedAt = Instant.now();
+        long startedNanos = System.nanoTime();
+        reportBatch(runId, "RUNNING", startedAt, null, null, null, null);
 
-        // Réconciliation côté API (DB en ligne) — crée/lie video_id sur l'ensemble des sources
-        int hoursWindow = cfg.getBatch().hoursWindow;
-        webApiSinkService.runReconcileAll(hoursWindow, false);
+        int pushedSnapshots = 0;
+        try {
+            pushedSnapshots = discoveryService.discover();
+            int finalPushedSnapshots = pushedSnapshots;
+            log.info(() -> String.format(
+                    "[batch] discovery done, pushedSnapshots=%d — launching API reconciliation…",
+                    finalPushedSnapshots
+            ));
 
-        log.info("[batch] reconcile (API sink) triggered for ALL sources (no time window)");
+            int hoursWindow = cfg.getBatch().hoursWindow;
+            webApiSinkService.runReconcileAll(hoursWindow, false);
+            webApiSinkService.refreshMaterializedViews();
+
+            int durationMs = elapsedMs(startedNanos);
+            reportBatch(runId, "SUCCESS", startedAt, Instant.now(), durationMs, pushedSnapshots, null);
+            log.info(() -> String.format(
+                    "[batch] completed, snapshots=%d, durationMs=%d",
+                    finalPushedSnapshots,
+                    durationMs
+            ));
+        } catch (RuntimeException e) {
+            int durationMs = elapsedMs(startedNanos);
+            reportBatch(runId, "ERROR", startedAt, Instant.now(), durationMs, pushedSnapshots, e.getMessage());
+            throw e;
+        }
+    }
+
+    private void reportBatch(String runId, String status, Instant startedAt, Instant finishedAt,
+                             Integer durationMs, Integer items, String message) {
+        try {
+            webApiSinkService.reportBatch(
+                    runId, status, startedAt, finishedAt, durationMs, items, message
+            );
+        } catch (Exception e) {
+            log.warning("[batch] health report failed: " + e);
+        }
+    }
+
+    private static int elapsedMs(long startedNanos) {
+        return (int)Math.min(Integer.MAX_VALUE, (System.nanoTime() - startedNanos) / 1_000_000L);
     }
 }

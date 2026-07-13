@@ -2,58 +2,40 @@
 
 But : suivre proprement les performances vidéo de deux webTV, avec une base fiable, peu de bruit et aucun secret dans Git ou les archives de revue.
 
-## MUST — intégrité, sécurité, exploitation
+## MUST — intégrité, sécurité et exploitation
 
-- [ ] **Activer réellement l’authentification HMAC sur toutes les routes qui modifient les données** : ingestion sources/métriques, réconciliation, overrides, résolution des doublons et refresh des vues. Le batch doit utiliser les méthodes signées du client API.
-- [ ] Ajouter au schéma les tables nécessaires à l’authentification/idempotence, ou supprimer le code mort correspondant. Prévoir une protection anti-rejeu du nonce.
-- [ ] Corriger `OverridesController` : variable `$pdo` non définie lors du refresh.
-- [ ] Remplacer les scripts SQL destructifs (`DROP TABLE`) par des migrations versionnées, réexécutables et sauvegardables. Documenter clairement l’ordre d’installation/mise à jour.
-- [ ] **Garantir la monotonie des vues cumulées par source** :
-  - ignorer un `0` reçu après une valeur positive ;
-  - ne jamais remplacer une valeur de vues par une valeur inférieure ;
-  - conserver malgré tout les autres métriques valides du snapshot ;
-  - journaliser l’anomalie avec plateforme, vidéo, ancienne et nouvelle valeur.
-- [ ] Créer un job d’assainissement DB avec mode `dry-run` : supprimer les snapshots à zéro apparus après une valeur positive, détecter les régressions et produire un rapport avant toute correction.
-- [ ] **Rendre le stockage parcimonieux réellement effectif** : insérer un snapshot seulement si une métrique utile change, si le delta de vues dépasse le seuil configuré, ou pour le point de garde quotidien. Ne pas stocker des dizaines de points identiques.
-- [ ] Ne plus recalculer toutes les vues matérialisées à chaque lot d’ingestion. Déclencher un refresh différé/débouclé une fois par exécution de batch, avec verrou fiable et métriques de durée.
-- [ ] Aligner `006_performances.sql`, `007_graph_views.sql` et `MaterializedViewsSql.php` : noms de tables, index et stratégie de refresh divergent actuellement.
-- [ ] Vérifier les secrets avant chaque commit/archive : seuls les fichiers `*.tmpl` sont partageables. Scanner aussi l’historique Git si un token a déjà été commité.
-- [ ] Corriger Instagram : en cas d’échec des insights, ne pas envoyer automatiquement `views=0`, `shares=0`, `reach=0`. Utiliser `null` pour « donnée inconnue ».
+- [x] Garantir la monotonie de `views_native` et `total_watch_seconds` par source ; conserver la dernière valeur connue quand une plateforme renvoie `null` et journaliser les régressions corrigées.
+- [x] Rendre les snapshots parcimonieux : seuil absolu/relatif, changements d’engagement utiles et point de garde quotidien.
+- [x] Ne rafraîchir les vues matérialisées qu’une fois en fin de `batch:run`, avec verrou DB, état, durée et erreur.
+- [x] Corriger Instagram : ne jamais convertir un échec d’insights en `views=0`, `shares=0` ou `reach=0`.
+- [x] Corriger `OverridesController` : le refresh n’utilise plus une variable `$pdo` inexistante.
+- [x] Corriger les tris Total, YouTube, Facebook, Instagram et TikTok côté API et IHM.
+- [x] Exposer `/health` : dernier snapshot/succès par plateforme, fraîcheur, dernier batch, refresh, erreurs et état probable du token.
+- [x] Afficher les alertes de santé globalement dans l’IHM et une page Santé détaillée.
+- [x] Alerter si un token Facebook/Instagram/YouTube est expiré ou refusé, et prévenir avant expiration lorsque la date est connue.
+- [x] Supprimer le code mort évident : doublon `TeaserHeuristics`, fichiers Angular générés non utilisés et `require` dupliqué.
+- [ ] Imposer réellement l’authentification HMAC sur tous les endpoints d’écriture. Ajouter des tests de rejet sans signature, signature invalide et rejeu du nonce.
+- [ ] Ajouter une commande d’assainissement DB en `dry-run`, puis exécution : supprimer les anciens snapshots à zéro uniquement lorsqu’un point antérieur ou postérieur non nul prouve l’anomalie.
+- [ ] Ajouter des tests d’intégration MariaDB pour monotonie, parcimonie, verrou de refresh et données inconnues.
+- [ ] Remplacer les scripts SQL destructifs par des migrations versionnées et réexécutables.
+- [ ] Vérifier les secrets avant chaque commit/archive et scanner l’historique Git si un token a déjà été commité.
 
-## SHOULD — performances et qualité du code
+## SHOULD — performances et qualité des données
 
-- [ ] Supprimer le N+1 de tendance dans la liste : `TrendService` exécute actuellement une requête par vidéo affichée. Calculer les tendances en une requête ou les préagréger.
-- [ ] Utiliser réellement la politique de polling : YouTube/Facebook redécouvrent et relisent actuellement un historique très large à chaque run, alors que `PollingPolicy` n’est pas utilisé.
-- [ ] Séparer clairement les étapes du batch : discovery, collecte des métriques, ingestion, réconciliation, refresh analytique. Une étape en erreur ne doit pas invalider les autres plateformes.
-- [ ] Ajouter des tests back sur : monotonie, zéro temporaire, snapshot identique, tri de chaque colonne, pagination, auth HMAC et concurrence de refresh.
-- [ ] Ajouter des tests front sur : tri, filtre, changement rapide de page, erreur API, données absentes et token expiré.
-- [ ] Réduire le code mort/ancien : doublon `TeaserHeuristics`, fichiers Angular générés non utilisés et imports/require dupliqués.
-- [ ] Ajouter des logs structurés par run (`run_id`, tenant, plateforme, durée, éléments lus/insérés/ignorés/anormaux), sans payload complet ni token.
-- [ ] Exposer une page santé simple : dernier succès par plateforme, âge du dernier snapshot, durée du dernier batch, erreurs et token probablement expiré.
+- [ ] Distinguer dans la santé : token expiré, quota dépassé, permission retirée, panne API et erreur réseau.
+- [ ] Interroger Meta pour obtenir automatiquement la date d’expiration lorsqu’elle est accessible, sans journaliser le token.
+- [ ] Ajouter un historique court des incidents au lieu de conserver uniquement la dernière erreur.
+- [ ] Supprimer le N+1 de tendance dans la liste ; calculer les tendances en lot ou les matérialiser.
+- [ ] Rendre le refresh du rollup atomique par table temporaire + renommage pour éviter une table vide pendant le recalcul.
+- [ ] Ajouter une politique de rétention : points détaillés récents, puis consolidation journalière/hebdomadaire.
+- [ ] Aligner `002_views.sql`, `005_views_fallback_on_reach.sql`, `006_performances.sql`, `007_graph_views.sql` et `MaterializedViewsSql.php`.
+- [ ] Utiliser réellement une politique de polling : limiter les anciennes vidéos stables et suivre plus souvent les nouvelles publications.
 
-## SHOULD — IHM et graphes
+## DO — améliorations utiles
 
-- [x] Supprimer le fond jaune temporaire de la table.
-- [x] Ajouter le tri serveur sur les colonnes : date, titre, total, YouTube, Facebook, Instagram et engagement.
-- [ ] Afficher `—` / « indisponible » plutôt que `0` lorsqu’une donnée n’a pas été reçue ou que la collecte a échoué.
-- [ ] Afficher la fraîcheur par plateforme et un avertissement si une source n’a plus été mise à jour.
-- [ ] Limiter les graphes au nombre de points utile à l’écran et conserver les points significatifs : début, fin, changements, pics et garde quotidienne.
-- [ ] Ne pas interpoler silencieusement des valeurs comme si elles avaient été mesurées. Distinguer visuellement les points réels des valeurs calculées.
-- [ ] Ajouter des périodes rapides : 24 h, 7 j, 28 j, 6 mois, tout.
-- [ ] Ajouter un filtre « type » (long, teaser, short/reel) et des comparaisons entre vidéos de même type/durée.
-- [ ] Rendre la liste lisible sur mobile : colonnes prioritaires, titre aligné à gauche, en-tête fixe et choix de colonnes.
-
-## DO — idées utiles
-
-- [ ] **Mesurer l’efficacité des partages Facebook** : étudier d’abord ce que l’API permet réellement. Prévoir un modèle indépendant de l’API (`share_target`, groupe/page, date, URL partagée, campagne) et accepter une saisie/import manuel si les statistiques des groupes ne sont pas accessibles.
-- [ ] Générer des liens distincts/UTM par groupe lorsque le lien pointe vers un site contrôlé, afin de mesurer au moins les clics et conversions par lieu de partage.
-- [ ] Ajouter un tableau « meilleur rendement » : vues gagnées à 24 h/7 j, engagement, durée vue et rendement par plateforme/type de vidéo.
-- [ ] Détecter automatiquement les vidéos sous-performantes ou anormalement performantes par rapport aux vidéos comparables.
-- [ ] Ajouter export CSV/XLSX des données nettoyées et des anomalies de collecte.
-- [ ] Ajouter une commande de maintenance : diagnostic DB, volume par table/source, doublons, zéros, régressions et estimation du gain après nettoyage.
-
-## Décisions actuelles
-
-- Deux webTV restent isolées : une configuration et une base par webTV. Pas de colonne `tenant_id` tant que ce modèle reste simple à exploiter.
-- Les vues sont cumulatives et doivent être monotones. Une baisse reçue d’une API est traitée comme une anomalie de collecte, pas comme une nouvelle vérité.
-- `null` signifie « inconnu/non reçu » ; `0` signifie une mesure réelle à zéro.
+- [ ] Groupes Facebook : étudier les données réellement disponibles. Repli utile : liens UTM distincts par groupe et saisie/import manuel des partages.
+- [ ] Afficher les deltas 24 h / 7 j par plateforme dans la liste, sans requête par ligne.
+- [ ] Ajouter un filtre « données périmées » et un filtre « erreurs de collecte ».
+- [ ] Ajouter un export CSV des vidéos et de la santé des collecteurs.
+- [ ] Ajouter GitHub Actions : Maven, tests Java, lint PHP et build Angular.
+- [ ] Ajouter un job hebdomadaire de vérification DB : régressions, zéros suspects, sources orphelines et doublons.

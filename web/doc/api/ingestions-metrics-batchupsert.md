@@ -1,91 +1,61 @@
+# Ingestion des métriques
 
-Ingestion METRICS
------------------
+## `POST /api/v1/metrics:batchUpsert`
 
-### `POST /api/v1/metrics:batchUpsert`
+Importe un lot de métriques et rattache chaque point à une source par `(platform, platform_video_id)`.
 
-**Description**  
-Importe ou met à jour des *snapshots* de métriques dans la table `metric_snapshot`.  
-Chaque enregistrement est lié à une vidéo source via `(platform, platform_video_id)`.
-
----
-
-### 🔒 Authentification
-Le contrôleur vérifie une authentification d’ingestion :
-- `requireIngestAuth()` ou `requireValidRequest()` selon la config du backend.  
-  → Le jeton doit être valide avant l’insertion.
-
----
-
-### 📥 Entrée
-
-**Structure attendue :**
 ```json
 {
   "snapshots": [
     {
       "platform": "YOUTUBE",
+      "platform_format": "VIDEO",
       "platform_video_id": "abc123",
-      "snapshot_at": "2025-10-09T12:00:00Z",
-
+      "snapshot_at": "2026-07-13T12:00:00Z",
       "views_native": 10500,
       "likes": 340,
       "comments": 25,
       "shares": 12,
-
-      "avg_watch_seconds": 37.5,
+      "avg_watch_seconds": 37,
       "total_watch_seconds": 392000,
       "video_length_seconds": 45,
-
-      "reach": 8700,
-      "unique_viewers": 8200,
-
-      "reactions_total": 500,
-      "reactions_like": 400,
-      "reactions_love": 80,
-      "reactions_wow": 10,
-      "reactions_haha": 5,
-      "reactions_sad": 3,
-      "reactions_angry": 2,
-
-      "legacy_views_3s": 9500
+      "reach": null
     }
   ]
 }
 ```
 
-### Normalisation appliquée côté serveur
+## Règles d’intégrité
 
-| Champ d’entrée                                                           | Traitement côté API                                                                 |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `platform`                                                               | Uppercase, défaut = `"YOUTUBE"`                                                     |
-| `platform_video_id`                                                      | Obligatoire ; chaîne non vide sinon ignoré (`skipped`)                              |
-| `snapshot_at`                                                            | Converti en ISO UTC (`toIsoUtc`), accepte ISO, epoch s/ms, ou `YYYY-mm-dd HH:ii:ss` |
-| `views_native`, `likes`, `comments`, `shares`, `reach`, `unique_viewers` | Convertis en `int` ou `null`                                                        |
-| `avg_watch_seconds`, `total_watch_seconds`                               | Convertis en `float` ou `null`                                                      |
-| `video_length_seconds`                                                   | Converti en `int` ou `null`                                                         |
-| `reactions_*`                                                            | Convertis en `int` ou `null`                                                        |
-| `legacy_views_3s` / `views_3s`                                           | Fusionnés dans `legacy_views_3s`                                                    |
-| Autres champs inconnus                                                   | Ignorés                                                                             |
+- `null` signifie « inconnue » et ne remplace pas la dernière valeur connue ;
+- `views_native` et `total_watch_seconds` ne peuvent pas régresser ;
+- un point hors ordre chronologique est ignoré ;
+- un snapshot est stocké seulement si le delta de vues dépasse le seuil absolu ou relatif, si une métrique utile change, ou pour le point de garde quotidien ;
+- si aucun point n’est stocké, aucun refresh analytique n’est demandé ;
+- le refresh réel est exécuté une seule fois en fin de batch par `POST /api/v1/refresh:run`.
 
-### Réponse
+## Réponse 200
+
 ```json
 {
   "status": "ok",
   "ok": 195,
-  "ko": 3,
+  "ko": 0,
+  "stored": 24,
+  "skipped": 171,
+  "monotonic_corrections": 2,
+  "refresh_requested": true,
   "items": [
-    { "platform": "YOUTUBE", "platform_video_id": "abc123", "status": "upserted" },
-    { "platform": "FACEBOOK", "platform_video_id": "987654321", "status": "skipped" }
-  ],
-  "skipped_pre": 2
+    {
+      "i": 0,
+      "status": "stored",
+      "reason": "views_delta",
+      "source_video_id": 42,
+      "views_delta": 25,
+      "monotonic_corrections": 0
+    }
+  ]
 }
 ```
 
-### Notes techniques
-- Chaque snapshot est rattaché à une source existante via (platform, platform_video_id) ;
-- si aucune correspondance, l’entrée est rejetée côté service.
-- L’API supporte les timestamps ISO, Unix secondes et millisecondes.
-- Toutes les dates sont converties en UTC avant insertion.
-- Le service interne MetricsIngestService::ingestBatch() réalise les opérations d’upsert sur metric_snapshot
-  avec clé unique (source_video_id, snapshot_at).
+Raisons possibles : `first_snapshot`, `same_timestamp_update`, `views_delta`, `useful_metric_changed`, `daily_guard`, `below_threshold` et `out_of_order`.

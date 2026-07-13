@@ -1,6 +1,8 @@
 package ch.mno.ugo2.service;
 
-import ch.mno.ugo2.facebook.FacebookApiException;
+import ch.mno.ugo2.config.FacebookProps;
+import ch.mno.ugo2.config.InstagramProps;
+import ch.mno.ugo2.config.YouTubeProps;
 import ch.mno.ugo2.facebook.FacebookCollectorService;
 import ch.mno.ugo2.instagram.InstagramCollectorService;
 import ch.mno.ugo2.youtube.YouTubeCollectorService;
@@ -8,58 +10,73 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.Locale;
+import java.util.function.IntSupplier;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class DiscoveryService {
 
-    private final YouTubeCollectorService yt;   // doit exposer int collect()
-    private final FacebookCollectorService fb;  // doit exposer int collect(boolean fullScan)
-    private final InstagramCollectorService ig;  // doit exposer int collect(boolean fullScan)
+    private final YouTubeCollectorService yt;
+    private final FacebookCollectorService fb;
+    private final InstagramCollectorService ig;
+    private final YouTubeProps ytProps;
+    private final FacebookProps fbProps;
+    private final InstagramProps igProps;
+    private final WebApiSinkService sink;
 
-    /**
-     * Retourne le nombre total de snapshots poussés (YT + FB).
-     */
     public int discover() {
         int pushed = 0;
-        pushed += discoverYT();
-        pushed += discoverFB();
-        pushed += discoverIG();
+        pushed += discoverPlatform("YOUTUBE", ytProps.getTokenExpiresAt(), yt::collect);
+        pushed += discoverPlatform("FACEBOOK", fbProps.getTokenExpiresAt(), fb::collect);
+        pushed += discoverPlatform("INSTAGRAM", igProps.getTokenExpiresAt(), ig::collect);
         return pushed;
     }
 
-    private int discoverFB() {
-        int fbPushed = 0;
+    private int discoverPlatform(String platform, String tokenExpiresAt, IntSupplier collector) {
+        long started = System.nanoTime();
         try {
-            fbPushed = fb.collect();
-        } catch (FacebookApiException e) {
-            log.error("[discovery] Facebook error: {}", e.getMessage());
+            int pushed = collector.getAsInt();
+            int durationMs = elapsedMs(started);
+            log.info("[discovery] {} pushed snapshots={} durationMs={}", platform, pushed, durationMs);
+            reportPlatform(platform, true, durationMs, pushed, null, tokenExpiresAt, false);
+            return pushed;
         } catch (Exception e) {
-            log.error("[discovery] Facebook unexpected error", e);
+            int durationMs = elapsedMs(started);
+            boolean tokenLikelyExpired = tokenLikelyExpired(e);
+            log.error("[discovery] {} error: {}", platform, e.getMessage(), e);
+            reportPlatform(platform, false, durationMs, 0, e.getMessage(), tokenExpiresAt, tokenLikelyExpired);
+            return 0;
         }
-        log.info("[discovery] Facebook pushed snapshots={}", fbPushed);
-        return fbPushed;
     }
 
-    private int discoverYT() {
-        int ytPushed = 0;
+    private void reportPlatform(String platform, boolean success, int durationMs, int items,
+                                String message, String tokenExpiresAt, boolean tokenLikelyExpired) {
         try {
-            ytPushed = yt.collect();  // fenêtre & logique internes au collector
-        } catch (Exception e) {
-            log.error("[discovery] YouTube unexpected error", e);
+            sink.reportPlatformHealth(
+                    platform, success, durationMs, items, message, tokenExpiresAt, tokenLikelyExpired
+            );
+        } catch (Exception reportError) {
+            log.warn("[discovery] health report for {} failed: {}", platform, reportError.toString());
         }
-        log.info("[discovery] YouTube pushed snapshots={}", ytPushed);
-        return ytPushed;
     }
 
-    private int discoverIG() {
-        int pushed = 0;
-        try {
-            pushed = ig.collect();  // fenêtre & logique internes au collector
-        } catch (Exception e) {
-            log.error("[discovery] Instagram unexpected error", e);
+    private static int elapsedMs(long startedNanos) {
+        return (int)Math.min(Integer.MAX_VALUE, (System.nanoTime() - startedNanos) / 1_000_000L);
+    }
+
+    private static boolean tokenLikelyExpired(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            String text = String.valueOf(current.getMessage()).toLowerCase(Locale.ROOT);
+            if (text.contains("401") || text.contains("403") || text.contains("oauth")
+                    || text.contains("access token") || text.contains("invalid credential")
+                    || text.contains("keyinvalid") || text.contains("expired")) {
+                return true;
+            }
+            current = current.getCause();
         }
-        log.info("[discovery] Instagram pushed snapshots={}", pushed);
-        return pushed;
+        return false;
     }
 }

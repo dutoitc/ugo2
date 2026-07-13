@@ -2,8 +2,14 @@
   <div class="brand"><a routerLink="/">UGO2</a></div>
   <nav class="nav">
     <a routerLink="/">Vidéos</a>
+    <a routerLink="/health">Santé</a>
   </nav>
 </header>
+
+<div class="site-alerts" *ngIf="healthAlerts().length">
+  <a routerLink="/health" *ngFor="let alert of healthAlerts()">{{ alert }}</a>
+</div>
+
 <main id="app">
   <router-outlet></router-outlet>
 </main>

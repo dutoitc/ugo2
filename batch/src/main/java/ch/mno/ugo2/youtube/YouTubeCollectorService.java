@@ -2,21 +2,18 @@ package ch.mno.ugo2.youtube;
 
 import ch.mno.ugo2.config.YouTubeProps;
 import ch.mno.ugo2.dto.MetricsUpsertItem;
+import ch.mno.ugo2.dto.SourceUpsertItem;
 import ch.mno.ugo2.service.WebApiSinkService;
 import ch.mno.ugo2.youtube.responses.PlaylistItemsResponse;
-import ch.mno.ugo2.youtube.responses.VideoListResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import ch.mno.ugo2.dto.SourceUpsertItem;
 import reactor.core.scheduler.Schedulers;
 
-
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Collecte l'historique des vidéos de chaînes configurées puis pousse les métriques vers l'API.
@@ -45,18 +42,29 @@ public class YouTubeCollectorService {
         }
 
         Set<String> allVideoIds = new LinkedHashSet<>();
+        int successfulChannels = 0;
+        Exception lastChannelError = null;
         for (String channelId : channelIds) {
             try {
                 String uploadsPlaylist = findUploadsPlaylist(apiKey, channelId);
-                if (uploadsPlaylist == null) continue;
-                allVideoIds.addAll(listPlaylistVideoIds(apiKey, uploadsPlaylist));
+                if (uploadsPlaylist != null) {
+                    allVideoIds.addAll(listPlaylistVideoIds(apiKey, uploadsPlaylist));
+                }
+                successfulChannels++;
             } catch (Exception e) {
+                lastChannelError = e;
                 log.warn("[YT] channel {}: {}", channelId, e.toString());
             }
         }
 
+        if (successfulChannels == 0 && lastChannelError != null) {
+            throw new IllegalStateException("YouTube collection failed for every configured channel", lastChannelError);
+        }
         if (allVideoIds.isEmpty()) return 0;
-        return collectAndPushByIds(new ArrayList<>(allVideoIds)).blockOptional().orElse(0);
+
+        int cap = Math.max(1, cfg.getMaxVideosPerRun());
+        List<String> selectedIds = allVideoIds.stream().limit(cap).toList();
+        return collectAndPushByIds(selectedIds).blockOptional().orElse(0);
     }
 
     /**
@@ -121,7 +129,7 @@ public class YouTubeCollectorService {
                 }
             }
             String next = page.getNextPageToken();
-            pageToken = StringUtils.isNotBlank(next)?next:null;;
+            pageToken = StringUtils.isNotBlank(next) ? next : null;
         } while (pageToken != null);
         log.info("[YT] playlist {} -> {} videoIds", playlistId, out.size());
         return out;

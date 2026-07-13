@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -65,7 +66,10 @@ public class InstagramCollectorService {
     List<SourceUpsertItem> sources = new ArrayList<>();
     List<MetricsUpsertItem> snapshots = new ArrayList<>();
 
-    for (String uid: users) {
+    int successfulUsers = 0;
+    Exception lastUserError = null;
+
+    for (String uid : users) {
       int pushedForUser = 0;
       try {
         // Champs: suffisent pour construire Source & premiers compteurs
@@ -76,8 +80,8 @@ public class InstagramCollectorService {
                 .queryParam("access_token", token)
                 .build(true).toUri();
 
-    List<Map<String,Object>> items = ig.listMedia(first.toString(), /*maxPages*/ 50);
-        for (Map<String,Object> m: items) {
+        List<Map<String, Object>> items = ig.listMedia(first.toString(), /*maxPages*/ 50);
+        for (Map<String, Object> m : items) {
           String mediaType = str(m.get("media_type"));
           String product = str(m.get("media_product_type"));
           String id = str(m.get("id"));
@@ -93,27 +97,31 @@ public class InstagramCollectorService {
           // Likes & comments & views (si dispo)
           Long likes = toLong(m.get("like_count"));
           Long comments = toLong(m.get("comments_count"));
-          Long views= 0L;
-          Long shares = 0L;
-            Long reach = 0L;
+          Long views = toLong(m.get("video_view_count"));
+          Long shares = null;
+          Long reach = null;
 
-            // Insights par média pour compléter/fiabiliser les compteurs (le /media seul est insuffisant)
-            try {
-                URI insightsUrl = UriComponentsBuilder.fromHttpUrl("https://graph.facebook.com/" + v + "/" + id + "/insights")
-                        .queryParam("metric", "views,reach,saved,likes,comments,shares,total_interactions")
-                        .queryParam("access_token", token)
-                        .build(true).toUri();
-                Map<String, Long> ins = ig.readInsights(insightsUrl.toString());
-                if (ins != null && !ins.isEmpty()) {
-                    views = ins.get("views");
-                    likes = ins.get("likes");
-                    comments = ins.get("comments");
-                    shares = ins.get("shares");
-                    reach = ins.get("reach");
-                }
-            } catch (Exception e) {
-                // on continue avec les valeurs déjà présentes
+          // Insights par média pour compléter/fiabiliser les compteurs (le /media seul est insuffisant)
+          try {
+            URI insightsUrl = UriComponentsBuilder.fromHttpUrl("https://graph.facebook.com/" + v + "/" + id + "/insights")
+                    .queryParam("metric", "views,reach,saved,likes,comments,shares,total_interactions")
+                    .queryParam("access_token", token)
+                    .build(true).toUri();
+            Map<String, Long> ins = ig.readInsights(insightsUrl.toString());
+            if (ins != null && !ins.isEmpty()) {
+              views = ins.get("views");
+              likes = ins.get("likes");
+              comments = ins.get("comments");
+              shares = ins.get("shares");
+              reach = ins.get("reach");
             }
+          } catch (Exception e) {
+            if (isAuthenticationFailure(e)) {
+              throw e;
+            }
+            log.warn("[IG] insights unavailable for media {}: {}", id, e.toString());
+            // Donnée inconnue : conserver null ou le compteur présent dans /media, jamais forcer 0.
+          }
 
           sources.add(SourceUpsertItem.builder()
                   .platform("INSTAGRAM")
@@ -123,8 +131,6 @@ public class InstagramCollectorService {
                   .permalink_url(permalink)
                   .media_type(type)
                   .published_at(ts.toString())
-//                  .is_teaser(null)
-//                  .video_id(null)
                   .locked(null)
                   .build());
 
@@ -137,29 +143,48 @@ public class InstagramCollectorService {
                   .likes(likes)
                   .comments(comments)
                   .shares(shares)
-                          .reach(reach)
+                  .reach(reach)
                   .build());
 
           pushedForUser++;
           if (pushedForUser >= cap) break;
         }
+        successfulUsers++;
       } catch (Exception e) {
+        lastUserError = e;
         log.warn("[IG] user={} error: {}", uid, e.toString());
       }
     }
 
+    if (successfulUsers == 0 && lastUserError != null) {
+      throw new IllegalStateException("Instagram collection failed for every configured account", lastUserError);
+    }
+
     // Push (bloquant)
     log.info("[IG] upsert {} sources, {} metrics", sources.size(), snapshots.size());
-    sink.batchUpsertSources(sources);
-    sink.batchUpsertMetrics(snapshots);
+    if (!sources.isEmpty()) sink.batchUpsertSources(sources);
+    if (!snapshots.isEmpty()) sink.batchUpsertMetrics(snapshots);
     return snapshots.size();
+  }
+
+  private static boolean isAuthenticationFailure(Throwable error) {
+    Throwable current = error;
+    while (current != null) {
+      String message = String.valueOf(current.getMessage()).toLowerCase(Locale.ROOT);
+      if (message.contains("401") || message.contains("403")
+              || message.contains("oauth") || message.contains("access token")
+              || message.contains("expired") || message.contains("invalid credential")) {
+        return true;
+      }
+      current = current.getCause();
+    }
+    return false;
   }
 
   private static String mapType(String mediaType, String product) {
     // media_type: IMAGE|VIDEO|CAROUSEL_ALBUM; media_product_type: FEED|STORY|REELS|AD|...
-
-      if ("VIDEO".equalsIgnoreCase(mediaType)) return "VIDEO";
-      if ("REELS".equalsIgnoreCase(product) || "REEL".equals(product)) return "REEL";
+    if ("REELS".equalsIgnoreCase(product) || "REEL".equalsIgnoreCase(product)) return "REEL";
+    if ("VIDEO".equalsIgnoreCase(mediaType)) return "VIDEO";
     return "POST";
   }
 
@@ -176,18 +201,18 @@ public class InstagramCollectorService {
     try { return Long.valueOf(String.valueOf(o)); } catch (Exception e) { return null; }
   }
 
-    private static Instant parseTs(String iso) {
-        if (StringUtils.isBlank(iso)) return null;
-        try {
-            return Instant.parse(iso);
-        } catch (Exception e) {
-            // Fallback pour format Instagram: "yyyy-MM-dd'T'HH:mm:ssZ" (ex: 2025-10-01T11:46:23+0000)
-            try {
-                java.time.format.DateTimeFormatter f = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
-                return java.time.OffsetDateTime.parse(iso, f).toInstant();
-            } catch (Exception ignored) {
-                return null;
-            }
-        }
+  private static Instant parseTs(String iso) {
+    if (StringUtils.isBlank(iso)) return null;
+    try {
+      return Instant.parse(iso);
+    } catch (Exception e) {
+      // Fallback pour format Instagram: "yyyy-MM-dd'T'HH:mm:ssZ" (ex: 2025-10-01T11:46:23+0000)
+      try {
+        java.time.format.DateTimeFormatter f = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
+        return java.time.OffsetDateTime.parse(iso, f).toInstant();
+      } catch (Exception ignored) {
+        return null;
+      }
     }
+  }
 }

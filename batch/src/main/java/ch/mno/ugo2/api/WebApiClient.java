@@ -9,7 +9,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -48,7 +47,8 @@ public class WebApiClient {
      * POST vide signé pour valider l’auth, sans effet de bord.
      */
     public Mono<Boolean> authNoop() {
-        byte[] body = Jsons.toBytes(Collections.emptyList());
+        Map<String, Object> payload = Map.of("snapshots", List.of());
+        byte[] body = Jsons.toBytes(payload);
         String path = "/api/v1/metrics:batchUpsert";
         return webClient.post()
                 .uri(path)
@@ -56,7 +56,7 @@ public class WebApiClient {
                     signer.sign(h, "POST", path, body);
                     h.set("Idempotency-Key", UUID.randomUUID().toString());
                 })
-                .body(BodyInserters.fromValue(Collections.emptyList()))
+                .bodyValue(body)
                 .exchangeToMono(resp -> Mono.just(resp.statusCode().is2xxSuccessful()))
                 .retryWhen(Retry.backoff(2, Duration.ofSeconds(1)));
     }
@@ -80,7 +80,7 @@ public class WebApiClient {
         if (ids == null || ids.isEmpty()) return Mono.just(List.of());
         final String path = "/api/v1/sources:filterMissing";
 
-        Map<String, Object> req = new HashMap<>();
+        Map<String, Object> req = new LinkedHashMap<>();
         req.put("platform", platform);
         req.put("ids", ids);
 
@@ -93,7 +93,7 @@ public class WebApiClient {
                     signer.sign(h, "POST", path, body);
                     h.set("Idempotency-Key", UUID.randomUUID().toString());
                 })
-                .body(BodyInserters.fromValue(req))
+                .bodyValue(body)
                 .retrieve()
                 .bodyToMono(FilterMissingResp.class)
                 .map(resp -> {
@@ -106,28 +106,6 @@ public class WebApiClient {
                 .doOnError(WebClientResponseException.class, e ->
                         log.warn("API {} -> {} body={}", path, e.getRawStatusCode(), e.getResponseBodyAsString()));
     }
-
-    public Mono<String> postJsonForBody(String path, Object payload) {
-        String jsonLabel;
-        try {
-            jsonLabel = payload == null ? "{}" : payload.toString();
-        } catch (Exception e) {
-            jsonLabel = "<payload>";
-        }
-        log.info("API POST {} (payload={})", path, jsonLabel.length() > 120 ? jsonLabel.substring(0, 120)+"…" : jsonLabel);
-
-        return webClient.post()
-                .uri(path)
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(payload == null ? "{}" : payload)
-                .exchangeToMono(resp -> resp.bodyToMono(String.class).defaultIfEmpty("")
-                        .map(body -> {
-                            log.info("API {} -> {} body={}", path, resp.statusCode(), body);
-                            return body;
-                        })
-                );
-    }
-
 
     /**
      * DTO JSON pour /sources:filterMissing
@@ -168,7 +146,7 @@ public class WebApiClient {
                     signer.sign(h, "POST", path, body);
                     h.set("Idempotency-Key", idempotencyKey);
                 })
-                .body(BodyInserters.fromValue(payload))
+                .bodyValue(body)
                 .exchangeToMono(resp -> handle(resp, path))
                 .retryWhen(Retry.backoff(2, Duration.ofSeconds(1)));
     }
@@ -177,7 +155,7 @@ public class WebApiClient {
         int code = resp.statusCode().value();
         if (resp.statusCode().is2xxSuccessful()) {
             log.info("API {} -> {}", path, code);
-            return resp.bodyToMono(Void.class);
+            return resp.releaseBody();
         }
         return resp.bodyToMono(String.class).defaultIfEmpty("")
                 .flatMap(b -> {
@@ -211,6 +189,15 @@ public class WebApiClient {
         body.put("hoursWindow", hoursWindow);
         body.put("dryRun",      dryRun);
         return send("/api/v1/reconcile:run", body);
+    }
+
+
+    public Mono<Void> reportHealth(Map<String, Object> event) {
+        return send("/api/v1/health:report", event);
+    }
+
+    public Mono<Void> refreshMaterializedViews() {
+        return send("/api/v1/refresh:run", Map.of());
     }
 
 

@@ -1,15 +1,15 @@
-- [Health](api/health.md)
-- [Ingestions-sources-filtermissing](api/ingestions-sources-filtermissing.md)
-- [Ingestions-sources-batchupsert](ingestions-sources-batchupsert.md)
-- [Ingestions-metrics-batchupsert](api/ingestions-metrics-batchupsert.md)
-- [Lecture-videos](api/lecture-videos.md)
-- [Lecture-video](api/lecture-video.md)
-- [Timeseries](api/timeseries.md)
+# API UGO2
 
+- [Santé](api/health.md)
+- [Ingestion des sources](api/ingestions-sources-batchupsert.md)
+- [Filtre des sources absentes](api/ingestions-sources-filtermissing.md)
+- [Ingestion des métriques](api/ingestions-metrics-batchupsert.md)
+- [Liste des vidéos](api/lecture-videos.md)
+- [Détail d’une vidéo](api/lecture-video.md)
+- [Séries temporelles](api/timeseries.md)
 
+Autres endpoints :
 
-Others
-------
-- POST /api/v1/reconcile:run
-- POST /api/v1/overrides:apply
-
+- `POST /api/v1/reconcile:run`
+- `POST /api/v1/overrides:apply`
+- `POST /api/v1/refresh:run`

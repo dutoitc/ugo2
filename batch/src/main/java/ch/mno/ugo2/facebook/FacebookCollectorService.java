@@ -19,6 +19,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @Service
@@ -34,17 +35,25 @@ public class FacebookCollectorService {
      */
     public int collect() {
         Set<String> allVideoIds = new LinkedHashSet<>();
+        int successfulPages = 0;
+        Exception lastPageError = null;
         for (String pageId : cfg.getPageIds()) {
             try {
                 allVideoIds.addAll(discoverVideoIdsForPage(pageId));
+                successfulPages++;
             } catch (Exception e) {
+                lastPageError = e;
                 log.warn("[FB] page {}: {}", pageId, e.toString());
             }
         }
+        if (successfulPages == 0 && lastPageError != null) {
+            throw new IllegalStateException("Facebook collection failed for every configured page", lastPageError);
+        }
         if (allVideoIds.isEmpty()) return 0;
 
-        return collectAndPushByIds(new ArrayList<>(allVideoIds))
-                .blockOptional().orElse(0);
+        int cap = Math.max(1, cfg.getMaxVideosPerRun());
+        List<String> selectedIds = allVideoIds.stream().limit(cap).toList();
+        return collectAndPushByIds(selectedIds).blockOptional().orElse(0);
     }
 
     /**
@@ -55,6 +64,7 @@ public class FacebookCollectorService {
 
         final String v = cfg.getApiVersion();
         final String token = cfg.getAccessToken();
+        AtomicReference<Throwable> lastError = new AtomicReference<>();
 
         return Flux.fromIterable(ids)
                 .flatMap(id ->
@@ -72,23 +82,31 @@ public class FacebookCollectorService {
                                             return new SrcAndMet(src, met);
                                         })
                                         .onErrorResume(ex -> {
+                                            lastError.set(ex);
                                             log.warn("[FB] skip id={} cause={}", id, ex.toString());
                                             return Mono.empty();
                                         })
                         , /*concurrency*/ 6)
                 .collectList()
-                .flatMap(list -> Mono.fromRunnable(() -> {
-                                    var sources = list.stream().map(SrcAndMet::src).toList();
-                                    var snapshots = list.stream().map(SrcAndMet::met).toList();
-                                    log.info("[FB] upsert {} sources, {} metrics", sources.size(), snapshots.size());
+                .flatMap(list -> {
+                    if (list.isEmpty()) {
+                        return Mono.error(new IllegalStateException(
+                                "Facebook returned no usable metrics for " + ids.size() + " video(s)",
+                                lastError.get()
+                        ));
+                    }
+                    return Mono.fromRunnable(() -> {
+                                var sources = list.stream().map(SrcAndMet::src).toList();
+                                var snapshots = list.stream().map(SrcAndMet::met).toList();
+                                log.info("[FB] upsert {} sources, {} metrics", sources.size(), snapshots.size());
 
-                                    // ⚠ appels bloquants → boundedElastic
-                                    sink.batchUpsertSources(sources);
-                                    sink.batchUpsertMetrics(snapshots);
-                                })
-                                .subscribeOn(Schedulers.boundedElastic())
-                )
-                .thenReturn(ids.size());
+                                // ⚠ appels bloquants → boundedElastic
+                                sink.batchUpsertSources(sources);
+                                sink.batchUpsertMetrics(snapshots);
+                            })
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .thenReturn(list.size());
+                });
     }
 
     /**
@@ -102,8 +120,8 @@ public class FacebookCollectorService {
         final String token = cfg.getAccessToken();
 
         out.addAll(findVideos(pageId, version, token, cfg.getPageSize(), null));
-        out.addAll(findUploaded(pageId, version, token, out));
-        out.addAll(findReels(pageId, version, token, out));
+        out.addAll(findUploaded(pageId, version, token));
+        out.addAll(findReels(pageId, version, token));
 
         return out.stream()
                 .distinct()
@@ -180,7 +198,7 @@ public class FacebookCollectorService {
 
 
     /** videos?type=uploaded */
-    private List<String> findUploaded(String pageId, String version, String token, Set<String> out) {
+    private List<String> findUploaded(String pageId, String version, String token) {
         try {
             List<String> uploaded = fb.videosUploaded(version, pageId, token)
                     .blockOptional()
@@ -194,7 +212,7 @@ public class FacebookCollectorService {
     }
 
     /** videos?type=reels */
-    private List<String> findReels(String pageId, String version, String token, Set<String> out) {
+    private List<String> findReels(String pageId, String version, String token) {
         try {
             List<String> reels = fb.videosReels(version, pageId, token)
                     .blockOptional()

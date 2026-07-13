@@ -16,5 +16,10 @@ export const APP_ROUTES: Routes = [
     loadComponent: () =>
       import('./pages/duplicates.page').then(m => m.DuplicatesPage),
   },
+  {
+    path: 'health',
+    loadComponent: () =>
+      import('./pages/health.page').then(m => m.HealthPage),
+  },
   { path: '**', redirectTo: '' },
 ];

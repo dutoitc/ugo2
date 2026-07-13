@@ -1,1 +1,13 @@
-/* Vide : on utilise les styles globaux pour la topbar et le layout */
+.site-alerts {
+  display: grid;
+  gap: 4px;
+  padding: 8px 16px;
+  background: #fff3cd;
+  border-bottom: 1px solid #e0bd55;
+}
+
+.site-alerts a {
+  color: #5f4600;
+  font-weight: 600;
+  text-decoration: none;
+}

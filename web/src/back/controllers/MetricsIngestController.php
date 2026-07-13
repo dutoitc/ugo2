@@ -7,7 +7,8 @@ use Web\Auth;
 use Web\Db;
 use Web\Lib\Http;
 use Web\Services\MetricsIngestService;
-use Web\Controllers\Videos\VideosRepository;
+use Web\Config;
+use Web\Services\MaterializedRefreshService;
 
 final class MetricsIngestController
 {
@@ -57,6 +58,7 @@ final class MetricsIngestController
 
             $norm[] = [
                 'platform'          => $platform,
+                'platform_format'   => $s['platform_format'] ?? null,
                 'platform_video_id' => $pvid,
                 'snapshot_at'       => $s['snapshot_at']  ?? null,
                 'views_native'      => self::toNullableInt($s['views_native'] ?? null),
@@ -91,21 +93,25 @@ final class MetricsIngestController
         ));
 
         // --- Appel service --------------------------------------------------------
-        $service = new MetricsIngestService($this->db);
+        $cfg = Config::load();
+        $service = new MetricsIngestService($this->db, $cfg['metrics'] ?? []);
         try {
             $result = $service->ingestBatch($norm);
 
-            // Update views
-            $pdo = $this->db->pdo();
-            $repo = new VideosRepository($pdo);
-            $repo->refreshMaterializedViews();
+            if ($result['stored'] > 0) {
+                (new MaterializedRefreshService($this->db))->markDirty();
+            }
 
             Http::json([
                 'status' => 'ok',
-                'ok'     => $result['ok'],
-                'ko'     => $result['ko'],
-                'items'  => $result['items'],
+                'ok' => $result['ok'],
+                'ko' => $result['ko'],
+                'stored' => $result['stored'],
+                'skipped' => $result['skipped'],
+                'monotonic_corrections' => $result['monotonic_corrections'],
+                'items' => $result['items'],
                 'skipped_pre' => $skipped,
+                'refresh_requested' => $result['stored'] > 0,
             ], 200);
         } catch (\Throwable $e) {
             error_log('[metrics:batchUpsert] ERROR: '.$e->getMessage());

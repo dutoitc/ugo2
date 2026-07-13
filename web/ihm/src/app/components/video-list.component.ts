@@ -6,13 +6,13 @@ import { ApiService } from '../services/api.service';
 import { firstValueFrom } from 'rxjs';
 import { VideoListItem } from '../services/api.models';
 
-// Types locaux pour l'UI
 type Platform = 'YOUTUBE' | 'FACEBOOK' | 'INSTAGRAM' | 'TIKTOK' | 'SUM';
 type SortKey =
   | 'views_desc' | 'views_asc'
   | 'youtube_desc' | 'youtube_asc'
   | 'facebook_desc' | 'facebook_asc'
   | 'instagram_desc' | 'instagram_asc'
+  | 'tiktok_desc' | 'tiktok_asc'
   | 'published_desc' | 'published_asc'
   | 'engagement_desc' | 'engagement_asc'
   | 'watch_eq_desc' | 'watch_eq_asc'
@@ -35,7 +35,7 @@ export class VideoListComponent {
   sort: SortKey = 'published_desc';
   platform: Platform | undefined = undefined;
   q = '';
-  sum = { youtube:0, facebook:0, instagram:0, tiktok:0 }
+  sum = { youtube: 0, facebook: 0, instagram: 0, tiktok: 0 };
   nbVideos = 0;
 
   rows = signal<VideoListItem[]>([]);
@@ -45,18 +45,20 @@ export class VideoListComponent {
   toZurichDate = toZurichDate;
   n = n;
 
-  constructor() { this.reload(); }
+  constructor() {
+    void this.reload();
+  }
 
-
-  async reload() {
+  async reload(): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
     try {
       const res = await firstValueFrom(this.api.listVideos({
-        page: this.page, size: this.size,
+        page: this.page,
+        size: this.size,
         sort: this.sort,
         platform: this.platform,
-        q: this.q?.trim() || undefined
+        q: this.q.trim() || undefined,
       }));
       this.rows.set(res.items || []);
       this.pages = Math.max(1, Math.ceil((res.total || 0) / (res.size || this.size)));
@@ -70,17 +72,17 @@ export class VideoListComponent {
     }
   }
 
-  async goToPage(p: number) {
+  async goToPage(p: number): Promise<void> {
     this.page = Math.max(1, Math.min(this.pages, p));
     await this.reload();
   }
 
-  async applyFilters() {
+  async applyFilters(): Promise<void> {
     this.page = 1;
     await this.reload();
   }
 
-  async toggleSort(desc: SortKey, asc: SortKey) {
+  async toggleSort(desc: SortKey, asc: SortKey): Promise<void> {
     this.sort = this.sort === desc ? asc : desc;
     this.page = 1;
     await this.reload();
@@ -92,15 +94,13 @@ export class VideoListComponent {
     return '';
   }
 
-  /** Vues de la plateforme */
   vp(v: VideoListItem, p: Platform): number | null {
-    const bp = (v as any).by_platform ?? {};
-    const raw = (bp as Record<string, unknown>)[p];
+    const bp = v.by_platform ?? {};
+    const raw = bp[p];
     const num = typeof raw === 'number' ? raw : (raw != null ? Number(raw) : null);
     return Number.isFinite(num as number) ? (num as number) : null;
   }
 
-  /** Couleur de fond  pour les vues de la plateforme*/
   vpBg(v: VideoListItem, p: Platform): string | null {
     const val = p === 'SUM' ? Number(v.views_native_sum ?? 0) : this.vp(v, p);
     if (val == null) return null;
@@ -119,5 +119,4 @@ export class VideoListComponent {
     }
     return 'num';
   }
-
 }

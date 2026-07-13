@@ -6,7 +6,7 @@ ugo2.api.maxBatch=1000
 
 # === YouTube collector ===
 ugo2.youtube.apiKey=YOUR_YT_API_KEY
-ugo2.youtube.channelIds=YOUT_YT_CHANNEL_ID
+ugo2.youtube.channelIds=YOUR_YT_CHANNEL_ID
 ugo2.youtube.windowDaysRolling=7
 ugo2.youtube.pageSize=50
 ugo2.youtube.maxVideosPerRun=200
@@ -14,12 +14,26 @@ ugo2.youtube.stateDir=.ugo2
 ugo2.youtube.minDeltaRel=0.01
 ugo2.youtube.minDeltaAbs=10
 ugo2.youtube.dailyFloor=true
-
+# API keys usually do not expire. Fill only when an OAuth credential has a known expiry.
+# ugo2.youtube.tokenExpiresAt=2026-12-31T23:59:59Z
 
 # === Facebook collector ===
-ugo2.facebook.api-version="v23.0"
-ugo2.facebook.access-token="EAAB...LONG_LIVED..."
-ugo2.facebook.page-ids=[ "123456789123456789" ]
+ugo2.facebook.api-version=v23.0
+ugo2.facebook.access-token=EAAB...LONG_LIVED...
+ugo2.facebook.page-ids=123456789123456789
 ugo2.facebook.window-days-initial=365
 ugo2.facebook.window-days-rolling=7
 ugo2.facebook.page-size=100
+ugo2.facebook.max-videos-per-run=200
+# Strongly recommended when the expiry date is known.
+# ugo2.facebook.token-expires-at=2026-12-31T23:59:59Z
+
+# === Instagram collector ===
+ugo2.instagram.api-version=v23.0
+ugo2.instagram.access-token=EAAB...LONG_LIVED...
+ugo2.instagram.user-ids=17841400000000000
+ugo2.instagram.window-days-initial=365
+ugo2.instagram.window-days-rolling=7
+ugo2.instagram.page-size=100
+ugo2.instagram.max-media-per-run=200
+# ugo2.instagram.token-expires-at=2026-12-31T23:59:59Z

@@ -15,6 +15,8 @@ public class FacebookProps {
   private String apiVersion = "v23.0";
   /** Page access token (long-lived) */
   private String accessToken;
+  /** Optional ISO-8601 expiry date for UI warnings */
+  private String tokenExpiresAt;
   /** One or more Facebook Page IDs to scan */
   private List<String> pageIds = new ArrayList<>();
 

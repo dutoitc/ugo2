@@ -17,6 +17,8 @@ public class InstagramProps {
   private List<String> userIds = new ArrayList<>();
   /** Long-lived access token with required scopes */
   private String accessToken;
+  /** Optional ISO-8601 expiry date for UI warnings */
+  private String tokenExpiresAt;
 
   /** Initial full scan window (days back) for batch:init */
   private int windowDaysInitial = 365*3;

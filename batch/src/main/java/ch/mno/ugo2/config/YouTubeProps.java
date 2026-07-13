@@ -13,6 +13,8 @@ import java.util.List;
 public class YouTubeProps {
     /** API key for YouTube Data API v3 */
     private String apiKey;
+    /** Optional ISO-8601 expiry date for UI warnings */
+    private String tokenExpiresAt;
     /** Channel IDs to scan */
     private List<String> channelIds = new ArrayList<>();
     /** Rolling window in days for batch:run */

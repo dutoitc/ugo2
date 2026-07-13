@@ -45,7 +45,7 @@ public class UgoCli {
       this.orchestrator = o; this.sanityCmd = s; this.sanitySourcesCmd = ss;
     }
 
-    @Command(name="batch:run", description="Rolling discovery (last N days), then reconcile")
+    @Command(name="batch:run", description="Collecte les plateformes, réconcilie et rafraîchit les agrégats")
     int run() {
       orchestrator.run();
       return 0;

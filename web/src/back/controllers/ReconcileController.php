@@ -7,7 +7,7 @@ use Web\Db;
 use Web\Auth;
 use Web\Util;
 use Web\Lib\Http;
-use Web\Controllers\Videos\VideosRepository;
+use Web\Services\MaterializedRefreshService;
 use PDO;
 
 final class ReconcileController
@@ -102,9 +102,9 @@ final class ReconcileController
         });
 
 
-        // Update views
-        $repo = new VideosRepository($pdo);
-        $repo->refreshMaterializedViews();
+        if ($createdVideos > 0 || $linkedSources > 0 || $appliedOverrides > 0) {
+            (new MaterializedRefreshService($this->db))->markDirty();
+        }
 
         Http::json([
             'ok' => true,

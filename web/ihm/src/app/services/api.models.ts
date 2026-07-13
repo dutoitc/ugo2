@@ -1,5 +1,3 @@
-import { TimeseriesPoint } from "../models/video-detail.vm";
-
 export interface VideoListItem {
   id: number;
   slug?: string | null;
@@ -192,5 +190,45 @@ export interface BackendTimeseriesPoint {
   ts: string;     // "YYYY-MM-DD HH:mm:ss.SSS"
   value: number;
 }
+export interface HealthPlatform {
+  platform: string;
+  status: 'OK' | 'WARNING' | 'ERROR' | string;
+  token_status: string;
+  token_expires_at?: string | null;
+  last_success_at?: string | null;
+  success_age_hours?: number | null;
+  last_snapshot_at?: string | null;
+  snapshot_age_hours?: number | null;
+  last_duration_ms?: number | null;
+  last_items?: number | null;
+  last_error_at?: string | null;
+  last_error?: string | null;
+  source_count: number;
+  message?: string | null;
+}
 
+export interface HealthResponse {
+  ok: boolean;
+  service: string;
+  now_utc?: string;
+  alerts: string[];
+  platforms: HealthPlatform[];
+  last_batch?: {
+    run_id: string;
+    started_at: string;
+    finished_at?: string | null;
+    duration_ms?: number | null;
+    status: string;
+    items?: number | null;
+    error?: string | null;
+  } | null;
+  refresh?: {
+    dirty_since?: string | null;
+    last_started_at?: string | null;
+    last_success_at?: string | null;
+    last_duration_ms?: number | null;
+    last_status: string;
+    last_error?: string | null;
+  } | null;
+}
 

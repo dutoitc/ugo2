@@ -6,7 +6,7 @@ namespace Web\Controllers;
 use Web\Db;
 use Web\Auth;
 use Web\Util;
-use Web\Controllers\Videos\VideosRepository;
+use Web\Services\MaterializedRefreshService;
 use PDO;
 
 /**
@@ -66,10 +66,19 @@ final class OverridesController
             }
         });
 
-        // Update views
-        $repo = new VideosRepository($pdo);
-        $repo->refreshMaterializedViews();
+        $refresh = ['refreshed'=>false, 'status'=>'CLEAN'];
+        if ($applied > 0) {
+            $refreshService = new MaterializedRefreshService($this->db);
+            $refreshService->markDirty();
+            $refresh = $refreshService->refreshIfDirty(true);
+        }
 
-        return ['ok' => true, 'createdOverrides' => $applied, 'unknownSources' => $unknown, 'invalid' => $invalid];
+        return [
+            'ok' => true,
+            'createdOverrides' => $applied,
+            'unknownSources' => $unknown,
+            'invalid' => $invalid,
+            'refresh' => $refresh,
+        ];
     }
 }

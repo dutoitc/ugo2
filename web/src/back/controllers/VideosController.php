@@ -8,6 +8,7 @@ use Web\Db;
 use Web\Lib\Http;
 use Web\Controllers\Videos\VideosListRequestFactory;
 use Web\Controllers\Videos\VideosRepository;
+use Web\Services\MaterializedRefreshService;
 
 
 final class VideosController
@@ -284,10 +285,10 @@ final class VideosController
     }
 
     public function refreshMV(): void {
-        $pdo = $this->pdo();
-        $repo = new VideosRepository($pdo);
-        $repo->refreshMaterializedViews();
-        \Web\Lib\Http::json(['ok' => true], 200);
+        $service = new MaterializedRefreshService($this->db);
+        $service->markDirty();
+        $result = $service->refreshIfDirty(true);
+        \Web\Lib\Http::json(['ok' => true, 'refresh' => $result], 200);
     }
 
 

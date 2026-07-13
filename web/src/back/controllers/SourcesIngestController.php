@@ -6,7 +6,7 @@ namespace Web\Controllers;
 use Web\Db;
 use Web\Auth;
 use Web\Lib\Http;
-use Web\Controllers\Videos\VideosRepository;
+use Web\Services\MaterializedRefreshService;
 use PDO;
 
 /**
@@ -169,9 +169,9 @@ final class SourcesIngestController
             if ($aff >= 2) $updated++; else $inserted++;
         }
 
-        // Update views
-        $repo = new VideosRepository($pdo);
-        $repo->refreshMaterializedViews();
+        if ($inserted > 0 || $updated > 0) {
+            (new MaterializedRefreshService($this->db))->markDirty();
+        }
 
         Http::json(['ok'=>true,'inserted'=>$inserted,'updated'=>$updated,'skipped'=>$skipped], 200);
     }

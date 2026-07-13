@@ -1,13 +1,17 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { VideoListResponse, VideoDetailResponse, DuplicatesResponse, VideoTimeseriesResponse } from '../services/api.models';
+import { DuplicatesResponse, HealthResponse, VideoDetailResponse, VideoListResponse, VideoTimeseriesResponse } from './api.models';
 
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private http = inject(HttpClient);
   private base = '/api/v1';
+
+  getHealth(): Observable<HealthResponse> {
+    return this.http.get<HealthResponse>(`${this.base}/health`);
+  }
 
   // ======================== /videos ========================
   listVideos(opts: {
