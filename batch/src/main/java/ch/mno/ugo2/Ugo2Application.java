@@ -15,8 +15,8 @@ public class Ugo2Application {
     ApplicationArguments a = ctx.getBean(ApplicationArguments.class);
     if (a.getSourceArgs().length == 0) {
       System.out.println("UGO2 started. No CLI args provided. Try:");
-      System.out.println("  java -jar target/ugo2-0.2.0-SNAPSHOT.jar import:init");
-      System.out.println("  java -jar target/ugo2-0.2.0-SNAPSHOT.jar update --profile=J0 --mode=stats");
+      System.out.println("  java -jar batch.jar batch:run");
+      System.out.println("  java -jar batch.jar sanity:check");
     }
   }
 }

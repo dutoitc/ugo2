@@ -9,8 +9,13 @@ import { VideoListItem } from '../services/api.models';
 // Types locaux pour l'UI
 type Platform = 'YOUTUBE' | 'FACEBOOK' | 'INSTAGRAM' | 'TIKTOK' | 'SUM';
 type SortKey =
-  | 'views_desc' | 'views_asc' | 'published_desc' | 'published_asc'
-  | 'engagement_desc' | 'watch_eq_desc'
+  | 'views_desc' | 'views_asc'
+  | 'youtube_desc' | 'youtube_asc'
+  | 'facebook_desc' | 'facebook_asc'
+  | 'instagram_desc' | 'instagram_asc'
+  | 'published_desc' | 'published_asc'
+  | 'engagement_desc' | 'engagement_asc'
+  | 'watch_eq_desc' | 'watch_eq_asc'
   | 'title_asc' | 'title_desc';
 
 @Component({
@@ -70,14 +75,21 @@ export class VideoListComponent {
     await this.reload();
   }
 
-  async toggleDateSort() {
-    this.sort = this.sort === 'published_desc' ? 'published_asc' : 'published_desc';
+  async applyFilters() {
+    this.page = 1;
     await this.reload();
   }
 
-  async toggleViewsSort() {
-    this.sort = this.sort === 'views_desc' ? 'views_asc' : 'views_desc';
+  async toggleSort(desc: SortKey, asc: SortKey) {
+    this.sort = this.sort === desc ? asc : desc;
+    this.page = 1;
     await this.reload();
+  }
+
+  sortCaret(desc: SortKey, asc: SortKey): string {
+    if (this.sort === desc) return '↓';
+    if (this.sort === asc) return '↑';
+    return '';
   }
 
   /** Vues de la plateforme */
@@ -90,7 +102,7 @@ export class VideoListComponent {
 
   /** Couleur de fond  pour les vues de la plateforme*/
   vpBg(v: VideoListItem, p: Platform): string | null {
-    const val = (p === 'SUM')?(v.views_native_sum as number?? 0):this.vp(v, p);
+    const val = p === 'SUM' ? Number(v.views_native_sum ?? 0) : this.vp(v, p);
     if (val == null) return null;
 
     if (p === 'SUM') {

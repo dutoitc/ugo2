@@ -11,11 +11,14 @@ Liste paginée des vidéos canoniques (avec agrégats récents).
 - `format` : `VIDEO` | `SHORT` | `REEL` (filtre via existence d’au moins une `source_video` avec ce format)
 - `from`, `to` : bornes de date (ISO) sur `video_published_at` (inclusif / exclusif)
 - `sort` :
-    - `views_desc` (défaut) → `views_native_sum DESC, video_published_at DESC`
+    - `views_desc` / `views_asc` → total des vues
+    - `youtube_desc` / `youtube_asc` → vues YouTube
+    - `facebook_desc` / `facebook_asc` → vues Facebook
+    - `instagram_desc` / `instagram_asc` → vues Instagram
     - `published_desc` → `video_published_at DESC, video_id DESC`
     - `published_asc`  → `video_published_at ASC,  video_id ASC`
-    - `engagement_desc` → `engagement_rate_sum DESC (NULLS LAST), views_native_sum DESC`
-    - `watch_eq_desc` → `watch_equivalent_sum DESC (NULLS LAST), views_native_sum DESC`
+    - `engagement_desc` / `engagement_asc` → taux d’engagement
+    - `watch_eq_desc` / `watch_eq_asc` → équivalent de visionnage
     - `title_asc`  → `video_title ASC,  video_id DESC`
     - `title_desc` → `video_title DESC, video_id DESC`
 
@@ -62,5 +65,5 @@ Liste paginée des vidéos canoniques (avec agrégats récents).
 - `500 Internal Server Error` : erreur inattendue
 
 ### Notes
-- Les données proviennent de la vue `v_video_latest_rollup` (agrégats par vidéo au **dernier snapshot** de chaque source).
+- Les données proviennent de `mv_video_rollup` (agrégats par vidéo au **dernier snapshot** de chaque source).
 - Le champ `last_snapshot_at` est calculé via sous-requête sur `metric_snapshot.created_at` (max par vidéo).

@@ -1,5 +1,7 @@
 # UGO2 — Spécification IHM (v1)
 
+> **État du document** : vision cible. L’IHM actuellement implémentée couvre surtout la liste, le détail et les doublons ; les autres écrans restent à planifier dans `TODO.md`.
+>
 > **But**: définir l’interface (écrans, APIs front↔back, techno, règles métiers et plan de réalisation) pour un front simple, maintenable et performant, adapté smartphone & grand écran.
 >
 > **Contexte**: DB existante (`video`, `source_video`, `metric_snapshot`, …). Heures DB en UTC. Affichage Europe/Zurich.

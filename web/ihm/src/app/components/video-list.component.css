@@ -25,6 +25,7 @@
   cursor: pointer;
 }
 .thbtn .sort{ opacity: .7; margin-left: 6px; }
+.thbtn{ color: inherit; }
 
 /* badges succès/échec sur cellules métriques */
 .metric-good{ background: var(--ugo-green-100, #E6FAF0); }
@@ -42,8 +43,7 @@
   border-collapse: separate;
   border-spacing: 0;
   border: 1px solid var(--ugo-border-strong);
-  /*background: var(--ugo-card);*/
-  background-color: yellow;
+  background: var(--ugo-card, #fff);
   color: var(--ugo-text);
   font-size: .95rem;
 }

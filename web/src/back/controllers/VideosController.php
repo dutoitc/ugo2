@@ -32,7 +32,7 @@ final class VideosController
      *  - platform (YOUTUBE|FACEBOOK|INSTAGRAM|TIKTOK) [optionnel]
      *  - format (VIDEO|SHORT|REEL) [optionnel, filtre via existence de sources correspondantes]
      *  - from, to (ISO date; filtre sur video_published_at)
-     *  - sort: views_desc (def), published_desc, published_asc, engagement_desc, watch_eq_desc, title_asc, title_desc
+     *  - sort: vues totales/par plateforme, publication, engagement, watch eq. ou titre (asc/desc)
      */
     public function list(): void
     {

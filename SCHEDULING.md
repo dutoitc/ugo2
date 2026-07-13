@@ -1,32 +1,48 @@
-# Scheduling & Quota Strategy
+# Collecte, quotas et stockage
 
-## Pipelines
-- **Discovery**: enumerate new/changed content (pages/channels/users; WP posts). Lower frequency.
-- **Stats**: fetch metrics for recent items (views/engagement). Higher frequency, decays over time.
+Ce document décrit la **cible**. Une partie de cette politique n’est pas encore appliquée par le code actuel ; les écarts sont listés dans `TODO.md`.
 
-## Cadences
-- **J0 (publication day)**: 11:00, 11:15, 11:30, 12:00, 12:30, 13:00, 13:30, 14:00, 15:00, 16:00, 17:00, 18:00, 19:00, 20:00, 21:00, 22:00.
-- **J+1..J+7**: 06:00, 09:00, 12:00, 15:00, 18:00, 21:00.
-- **Post J+7**: 1–2 times/day.
-- **After 1 month**: weekly.
+## Étapes d’un run
 
-## Quotas & resume
-- Use **If-None-Match / ETag** aggressively; 304 does not consume meaningful quota.
-- Persist **checkpoints** (per platform, per tenant): last page cursor / last published date / last processed ID.
-- If rate-limited or quota exhausted: **exponential backoff** + jitter; store unfinished range and **resume** next slot.
+```text
+discovery -> collecte métriques -> ingestion API -> réconciliation -> refresh analytique
+```
 
-## Discovery vs Stats split
-- Discovery pulls: last N items since last checkpoint (+48h margin).
-- Stats pulls: focus on last 7 days (denser), then decay cadence; older items grouped into weekly batches.
+Le refresh analytique doit être effectué une seule fois après l’ingestion, pas après chaque sous-lot.
 
-## Storage parsimony
-- Insert snapshot only if `(relative delta >= 1%) OR (absolute delta >= 10 views)`.
-- Always ensure **one daily guard snapshot** to track trends.
+## Cadence cible
 
-## Stars (gradient)
-- Compute per-source **24h growth** vs **7-day median**; thresholds drive ⭐/⭐⭐.
-- Thresholds are **configurable** in tenant config.
+| Âge de la vidéo | Collecte métriques |
+|---|---|
+| Jour de publication | Fréquente, selon les créneaux éditoriaux de la webTV |
+| J+1 à J+7 | Toutes les 3 à 6 heures |
+| J+8 à J+30 | Une fois par jour |
+| Plus d’un mois | Une fois par semaine, sauf vidéo encore active |
 
-## Alerts
-- **Milestones** every **1000** views (configurable) for each source and for the total without WP.
-- **Stale stats** (>24h) and **token expiry** (401/403).
+La discovery peut être moins fréquente que la collecte des métriques. Les vidéos anciennes ne doivent pas toutes être relues à chaque run.
+
+## Quotas et reprise
+
+- Batchs maximaux adaptés à chaque API.
+- ETag/`If-None-Match` lorsque la plateforme le permet.
+- Backoff exponentiel avec jitter sur limitation ou erreur temporaire.
+- Checkpoint par plateforme et webTV pour reprendre un run interrompu.
+- Une erreur Facebook ne bloque pas YouTube ou Instagram.
+
+## Parcimonie des snapshots
+
+Insérer un snapshot si au moins une condition est vraie :
+
+- première mesure de la source ;
+- variation absolue de vues au-dessus du seuil ;
+- variation relative au-dessus du seuil ;
+- autre métrique utile modifiée ;
+- aucun point de garde enregistré pour la journée.
+
+Ne pas insérer si toutes les métriques utiles sont identiques. Un zéro ou une baisse de vues après une valeur positive est rejeté/journalisé selon la règle de monotonie.
+
+## Maintenance
+
+- Diagnostic quotidien léger : données trop anciennes, zéros temporaires, régressions, sources sans métriques.
+- Assainissement périodique en `dry-run`, puis correction explicitement déclenchée.
+- Refresh des percentiles moins fréquent que le rollup principal.

@@ -47,3 +47,5 @@ t
 /.idea/uiDesigner.xml
 /batch/src/main/resources/application-capstv.properties
 /batch/src/main/resources/application-xplore.properties
+
+/files.txt

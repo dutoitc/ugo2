@@ -1,15 +1,12 @@
 <h1>Stats</h1>
 <ul>
-  <li>Nb de vidéos: {{ nbVideos }} (attention: certaines vidéos sont comptées plusieurs fois (plusieurs sources /
-    diffusions)
-  </li>
+  <li>Nb de vidéos: {{ nbVideos }} (attention: certaines vidéos sont comptées plusieurs fois selon les sources/diffusions)</li>
   <li>Nb de vues: {{ sum.youtube + sum.facebook + sum.instagram + sum.tiktok }}</li>
 </ul>
 
-
 <h1>Vidéos</h1>
 
-<form class="toolbar" (submit)="$event.preventDefault()">
+<form class="toolbar" (ngSubmit)="applyFilters()">
   <input type="search" placeholder="Rechercher…" [(ngModel)]="q" name="q">
   <select [(ngModel)]="platform" name="platform">
     <option [ngValue]="undefined">Toutes plateformes</option>
@@ -19,15 +16,24 @@
     <option value="TIKTOK">TikTok</option>
   </select>
   <select [(ngModel)]="sort" name="sort">
-    <option value="published_desc">Tri: publié ↓</option>
-    <option value="published_asc">publié ↑</option>
-    <option value="views_desc">vues ↓</option>
-    <option value="engagement_desc">engagement ↓</option>
-    <option value="watch_eq_desc">watch eq. ↓</option>
-    <option value="title_asc">titre A→Z</option>
-    <option value="title_desc">titre Z→A</option>
+    <option value="published_desc">Publié ↓</option>
+    <option value="published_asc">Publié ↑</option>
+    <option value="views_desc">Total vues ↓</option>
+    <option value="views_asc">Total vues ↑</option>
+    <option value="youtube_desc">YouTube ↓</option>
+    <option value="youtube_asc">YouTube ↑</option>
+    <option value="facebook_desc">Facebook ↓</option>
+    <option value="facebook_asc">Facebook ↑</option>
+    <option value="instagram_desc">Instagram ↓</option>
+    <option value="instagram_asc">Instagram ↑</option>
+    <option value="engagement_desc">Engagement ↓</option>
+    <option value="engagement_asc">Engagement ↑</option>
+    <option value="watch_eq_desc">Watch eq. ↓</option>
+    <option value="watch_eq_asc">Watch eq. ↑</option>
+    <option value="title_asc">Titre A→Z</option>
+    <option value="title_desc">Titre Z→A</option>
   </select>
-  <button (click)="reload()">Appliquer</button>
+  <button type="submit">Appliquer</button>
 </form>
 
 <p *ngIf="loading()">Chargement…</p>
@@ -38,32 +44,52 @@
     <colgroup>
       <col class="col-date">
       <col class="col-title">
-      <col class="col-num">   <!-- Total vues -->
-      <col class="col-num">   <!-- YT -->
-      <col class="col-num">   <!-- FB -->
-      <col class="col-num">   <!-- IG -->
+      <col class="col-num">
+      <col class="col-num">
+      <col class="col-num">
+      <col class="col-num">
       <col class="col-num-md">
-      /* Engagement */
     </colgroup>
     <thead>
     <tr>
-      <th class="center sortable" (click)="toggleDateSort()">
-        Publié le
-        <span class="sort-caret">
-        {{ sort === 'published_desc' ? '↓' : (sort === 'published_asc' ? '↑' : '') }}
-      </span>
+      <th class="center">
+        <button type="button" class="thbtn" (click)="toggleSort('published_desc', 'published_asc')">
+          Publié le <span class="sort-caret">{{ sortCaret('published_desc', 'published_asc') }}</span>
+        </button>
       </th>
-      <th class="center">Titre</th>
-      <th class="center sortable" (click)="toggleViewsSort()">
-        Total vues        
-        <span class="sort-caret">
-            {{ sort === 'views_desc' ? '↓' : (sort === 'views_asc' ? '↑' : '') }}
-        </span>
+      <th class="center">
+        <button type="button" class="thbtn" (click)="toggleSort('title_desc', 'title_asc')">
+          Titre <span class="sort-caret">{{ sortCaret('title_desc', 'title_asc') }}</span>
+        </button>
       </th>
-      <th class="center">YT<br><span class="sum">( {{ sum.youtube }}) </span></th>
-      <th class="center">FB<br><span class="sum">( {{ sum.facebook }}) </span></th>
-      <th class="center">IG<br><span class="sum">( {{ sum.instagram }}) </span></th>
-      <th class="center">Engagement</th>
+      <th class="center">
+        <button type="button" class="thbtn" (click)="toggleSort('views_desc', 'views_asc')">
+          Total vues <span class="sort-caret">{{ sortCaret('views_desc', 'views_asc') }}</span>
+        </button>
+      </th>
+      <th class="center">
+        <button type="button" class="thbtn" (click)="toggleSort('youtube_desc', 'youtube_asc')">
+          YT <span class="sort-caret">{{ sortCaret('youtube_desc', 'youtube_asc') }}</span>
+        </button>
+        <br><span class="sum">({{ sum.youtube }})</span>
+      </th>
+      <th class="center">
+        <button type="button" class="thbtn" (click)="toggleSort('facebook_desc', 'facebook_asc')">
+          FB <span class="sort-caret">{{ sortCaret('facebook_desc', 'facebook_asc') }}</span>
+        </button>
+        <br><span class="sum">({{ sum.facebook }})</span>
+      </th>
+      <th class="center">
+        <button type="button" class="thbtn" (click)="toggleSort('instagram_desc', 'instagram_asc')">
+          IG <span class="sort-caret">{{ sortCaret('instagram_desc', 'instagram_asc') }}</span>
+        </button>
+        <br><span class="sum">({{ sum.instagram }})</span>
+      </th>
+      <th class="center">
+        <button type="button" class="thbtn" (click)="toggleSort('engagement_desc', 'engagement_asc')">
+          Engagement <span class="sort-caret">{{ sortCaret('engagement_desc', 'engagement_asc') }}</span>
+        </button>
+      </th>
     </tr>
     </thead>
     <tbody>
@@ -74,37 +100,24 @@
         <a [href]="'/v/' + (v.slug || v.id)">{{ v.title }}</a>
       </td>
 
-
-      <!-- numériques / % à droite -->
       <td [ngClass]="vpBg(v, 'SUM')">
-
         <ng-container *ngIf="v.trend as t">
-
-          <!-- Étoiles -->
           <span *ngIf="t.stars > 0" class="stars">
             <ng-container *ngIf="t.stars === 1">⭐</ng-container>
             <ng-container *ngIf="t.stars === 2">⭐⭐</ng-container>
             <ng-container *ngIf="t.stars === 3">⭐⭐⭐</ng-container>
           </span>
-
         </ng-container>
-
         <span [title]="'trend ' + v?.trend?.slope?.toFixed(1)">{{ n(+(v.views_native_sum ?? 0)) }}</span>
-
       </td>
-      <td [ngClass]="vpBg(v, 'YOUTUBE')">
-        {{ n(vp(v,'YOUTUBE')) }}
-      </td>
-      <td [ngClass]="vpBg(v, 'FACEBOOK')">
-        {{ n(vp(v,'FACEBOOK')) }}
-      </td>
+      <td [ngClass]="vpBg(v, 'YOUTUBE')">{{ n(vp(v,'YOUTUBE')) }}</td>
+      <td [ngClass]="vpBg(v, 'FACEBOOK')">{{ n(vp(v,'FACEBOOK')) }}</td>
       <td class="num">{{ n(vp(v,'INSTAGRAM')) }}</td>
       <td class="num">
         {{ v.engagement_rate_sum == null ? '—' : ((+(v.engagement_rate_sum) * 100).toFixed(1) + '%') }}
       </td>
     </tr>
     </tbody>
-
   </table>
 
   <div class="pager">
