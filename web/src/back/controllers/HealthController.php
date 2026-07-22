@@ -7,6 +7,7 @@ use Web\Auth;
 use Web\Config;
 use Web\Db;
 use Web\Lib\Http;
+use Web\Lib\SensitiveData;
 use Web\Services\HealthStateService;
 
 final class HealthController
@@ -20,12 +21,11 @@ final class HealthController
             $state = new HealthStateService($this->db, $cfg['health'] ?? []);
             Http::json($state->snapshot(), 200);
         } catch (\Throwable $e) {
-            error_log('[health] '.$e->getMessage());
+            error_log('[health] '.SensitiveData::throwable($e));
             Http::json([
                 'ok' => false,
                 'service' => 'ugo2-api',
                 'error' => 'health_unavailable',
-                'message' => $e->getMessage(),
             ], 503);
         }
     }

@@ -6,6 +6,7 @@ namespace Web\Services;
 use PDO;
 use Web\Db;
 use Web\Controllers\Videos\VideosRepository;
+use Web\Lib\SensitiveData;
 
 final class MaterializedRefreshService
 {
@@ -89,7 +90,7 @@ final class MaterializedRefreshService
                 UPDATE refresh_job_state
                 SET last_duration_ms = ?, last_status = 'ERROR', last_error = ?
                 WHERE name = ?
-            ")->execute([$durationMs, substr($e->getMessage(), 0, 1000), self::JOB]);
+            ")->execute([$durationMs, SensitiveData::redact($e->getMessage()), self::JOB]);
             throw $e;
         } finally {
             $this->pdo->query("SELECT RELEASE_LOCK('".self::LOCK."')");

@@ -6,6 +6,7 @@ namespace Web\Controllers;
 use Web\Db;
 use Web\Auth;
 use Web\Lib\Http;
+use Web\Lib\SensitiveData;
 use Web\Services\MaterializedRefreshService;
 use PDO;
 
@@ -160,7 +161,7 @@ final class SourcesIngestController
                 ]);
             } catch (\PDOException $e) {
                 // log utile pour debug
-                error_log("[sources:batchUpsert] PDOException: " . $e->getMessage());
+                error_log('[sources:batchUpsert] '.SensitiveData::throwable($e));
                 $skipped++; // on continue sur item suivant
                 continue;
             }

@@ -1,5 +1,6 @@
 package ch.mno.ugo2.youtube;
 
+import ch.mno.ugo2.util.SensitiveDataRedactor;
 import ch.mno.ugo2.config.YouTubeProps;
 import ch.mno.ugo2.dto.MetricsUpsertItem;
 import ch.mno.ugo2.dto.SourceUpsertItem;
@@ -53,7 +54,7 @@ public class YouTubeCollectorService {
                 successfulChannels++;
             } catch (Exception e) {
                 lastChannelError = e;
-                log.warn("[YT] channel {}: {}", channelId, e.toString());
+                log.warn("[YT] channel {}: {}", channelId, SensitiveDataRedactor.redact(e));
             }
         }
 

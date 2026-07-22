@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Web;
 
 use Web\Lib\Http;
+use Web\Lib\SensitiveData;
 
 final class Router
 {
@@ -130,10 +131,10 @@ final class Router
             }
 
             // 404
-            Http::json(['error' => 'not_found', 'path' => $path], 404);
+            Http::json(['error' => 'not_found'], 404);
         } catch (\Throwable $e) {
-            error_log('[API] ERROR ' . $e->getMessage());
-            Http::json(['error' => 'internal_error', 'message' => $e->getMessage()], 500);
+            error_log('[API] ERROR ' . SensitiveData::throwable($e));
+            Http::json(['error' => 'internal_error'], 500);
         }
     }
 }

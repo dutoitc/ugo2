@@ -5,6 +5,7 @@ import ch.mno.ugo2.config.InstagramProps;
 import ch.mno.ugo2.config.YouTubeProps;
 import ch.mno.ugo2.facebook.FacebookCollectorService;
 import ch.mno.ugo2.instagram.InstagramCollectorService;
+import ch.mno.ugo2.util.SensitiveDataRedactor;
 import ch.mno.ugo2.youtube.YouTubeCollectorService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,8 +46,9 @@ public class DiscoveryService {
         } catch (Exception e) {
             int durationMs = elapsedMs(started);
             boolean tokenLikelyExpired = tokenLikelyExpired(e);
-            log.error("[discovery] {} error: {}", platform, e.getMessage(), e);
-            reportPlatform(platform, false, durationMs, 0, e.getMessage(), tokenExpiresAt, tokenLikelyExpired);
+            String safeError = SensitiveDataRedactor.redact(e);
+            log.error("[discovery] {} error: {}", platform, safeError);
+            reportPlatform(platform, false, durationMs, 0, safeError, tokenExpiresAt, tokenLikelyExpired);
             return 0;
         }
     }
@@ -58,7 +60,8 @@ public class DiscoveryService {
                     platform, success, durationMs, items, message, tokenExpiresAt, tokenLikelyExpired
             );
         } catch (Exception reportError) {
-            log.warn("[discovery] health report for {} failed: {}", platform, reportError.toString());
+            log.warn("[discovery] health report for {} failed: {}", platform,
+                    SensitiveDataRedactor.redact(reportError));
         }
     }
 

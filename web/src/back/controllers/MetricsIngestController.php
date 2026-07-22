@@ -6,6 +6,7 @@ namespace Web\Controllers;
 use Web\Auth;
 use Web\Db;
 use Web\Lib\Http;
+use Web\Lib\SensitiveData;
 use Web\Services\MetricsIngestService;
 use Web\Config;
 use Web\Services\MaterializedRefreshService;
@@ -85,11 +86,10 @@ final class MetricsIngestController
             ];
         }
 
-        // Petit log utile (1ère fois uniquement)
+        // Ne jamais journaliser un exemple de payload : titres, identifiants et URL peuvent être sensibles.
         error_log(sprintf(
-            '[metrics:batchUpsert] recv=%d norm=%d skipped=%d sample=%s',
-            count($in), count($norm), $skipped,
-            json_encode($norm[0] ?? null, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE)
+            '[metrics:batchUpsert] recv=%d norm=%d skipped=%d',
+            count($in), count($norm), $skipped
         ));
 
         // --- Appel service --------------------------------------------------------
@@ -114,8 +114,8 @@ final class MetricsIngestController
                 'refresh_requested' => $result['stored'] > 0,
             ], 200);
         } catch (\Throwable $e) {
-            error_log('[metrics:batchUpsert] ERROR: '.$e->getMessage());
-            Http::json(['error'=>'internal_error', 'message'=>$e->getMessage()], 500);
+            error_log('[metrics:batchUpsert] ERROR: '.SensitiveData::throwable($e));
+            Http::json(['error'=>'internal_error'], 500);
         }
     }
 

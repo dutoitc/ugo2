@@ -1,6 +1,7 @@
 package ch.mno.ugo2.service;
 
 import ch.mno.ugo2.config.AppProps;
+import ch.mno.ugo2.util.SensitiveDataRedactor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.java.Log;
 import org.springframework.stereotype.Service;
@@ -49,7 +50,8 @@ public class BatchOrchestrator {
             ));
         } catch (RuntimeException e) {
             int durationMs = elapsedMs(startedNanos);
-            reportBatch(runId, "ERROR", startedAt, Instant.now(), durationMs, pushedSnapshots, e.getMessage());
+            reportBatch(runId, "ERROR", startedAt, Instant.now(), durationMs, pushedSnapshots,
+                    SensitiveDataRedactor.redact(e));
             throw e;
         }
     }
@@ -61,7 +63,7 @@ public class BatchOrchestrator {
                     runId, status, startedAt, finishedAt, durationMs, items, message
             );
         } catch (Exception e) {
-            log.warning("[batch] health report failed: " + e);
+            log.warning("[batch] health report failed: " + SensitiveDataRedactor.redact(e));
         }
     }
 

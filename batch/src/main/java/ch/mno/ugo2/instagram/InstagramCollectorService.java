@@ -5,6 +5,7 @@ import ch.mno.ugo2.config.InstagramProps;
 import ch.mno.ugo2.dto.MetricsUpsertItem;
 import ch.mno.ugo2.dto.SourceUpsertItem;
 import ch.mno.ugo2.service.WebApiSinkService;
+import ch.mno.ugo2.util.SensitiveDataRedactor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -119,7 +120,7 @@ public class InstagramCollectorService {
             if (isAuthenticationFailure(e)) {
               throw e;
             }
-            log.warn("[IG] insights unavailable for media {}: {}", id, e.toString());
+            log.warn("[IG] insights unavailable for media {}: {}", id, SensitiveDataRedactor.redact(e));
             // Donnée inconnue : conserver null ou le compteur présent dans /media, jamais forcer 0.
           }
 
@@ -152,7 +153,7 @@ public class InstagramCollectorService {
         successfulUsers++;
       } catch (Exception e) {
         lastUserError = e;
-        log.warn("[IG] user={} error: {}", uid, e.toString());
+        log.warn("[IG] user={} error: {}", uid, SensitiveDataRedactor.redact(e));
       }
     }
 

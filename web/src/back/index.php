@@ -3,12 +3,13 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/Config.php';
 require_once __DIR__ . '/Db.php';
+require_once __DIR__ . '/lib/Http.php';
+require_once __DIR__ . '/lib/SensitiveData.php';
 require_once __DIR__ . '/Auth.php';
 require_once __DIR__ . '/Router.php';
 require_once __DIR__ . '/Util.php';
 
 // Helpers & contrôleurs
-require_once __DIR__ . '/lib/Http.php';
 require_once __DIR__ . '/controllers/sql/MaterializedViewsSql.php';
 require_once __DIR__ . '/controllers/videos/Paginator.php';
 require_once __DIR__ . '/controllers/videos/Sorts.php';

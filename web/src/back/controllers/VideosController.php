@@ -6,6 +6,7 @@ namespace Web\Controllers;
 use Web\Auth;
 use Web\Db;
 use Web\Lib\Http;
+use Web\Lib\SensitiveData;
 use Web\Controllers\Videos\VideosListRequestFactory;
 use Web\Controllers\Videos\VideosRepository;
 use Web\Services\MaterializedRefreshService;
@@ -280,7 +281,8 @@ final class VideosController
             \Web\Lib\Http::json(['ok' => true, 'kept' => $keep, 'deleted' => $delete, 'updated_source' => $update], 200);
         } catch (\Throwable $e) {
             $pdo->rollBack();
-            \Web\Lib\Http::json(['error' => 'db_error', 'message' => $e->getMessage()], 500);
+            error_log('[duplicates:resolve] '.SensitiveData::throwable($e));
+            \Web\Lib\Http::json(['error' => 'db_error'], 500);
         }
     }
 
@@ -300,10 +302,9 @@ final class VideosController
             Http::json(['ok' => true], 200);
 
         } catch (\Throwable $e) {
-
+            error_log('[timeseries:refresh] '.SensitiveData::throwable($e));
             Http::json([
                 'error' => 'refresh_failed',
-                'message' => $e->getMessage()
             ], 500);
         }
     }

@@ -1,5 +1,6 @@
 package ch.mno.ugo2.cli;
 
+import ch.mno.ugo2.util.SensitiveDataRedactor;
 import ch.mno.ugo2.service.BatchOrchestrator;
 import jakarta.annotation.PostConstruct;
 import org.springframework.boot.ApplicationArguments;
@@ -54,13 +55,13 @@ public class UgoCli {
     @Command(name="sanity:check", description="Vérifie /health + auth HMAC")
     int sanityCheck() {
       try { return sanityCmd.call(); }
-      catch (Exception e) { System.err.println(e.getMessage()); return 1; }
+      catch (Exception e) { System.err.println(SensitiveDataRedactor.redact(e)); return 1; }
     }
 
     @Command(name="sanity:sources", description="POST 1 source factice vers /sources:batchUpsert")
     int sanitySources() {
       try { return sanitySourcesCmd.call(); }
-      catch (Exception e) { System.err.println(e.getMessage()); return 1; }
+      catch (Exception e) { System.err.println(SensitiveDataRedactor.redact(e)); return 1; }
     }
 
     @Override public Integer call() { CommandLine.usage(this, System.out); return 0; }

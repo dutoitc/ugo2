@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT"
 
-ARCHIVE="ugo2-$(date +%Y%m%d-%H%M%S).tgz"
+ARCHIVE="${ARCHIVE:-ugo2-$(date +%Y%m%d-%H%M%S).tgz}"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
@@ -18,7 +18,7 @@ is_allowed_path() {
   case "$1" in
     .gitignore|CHANGELOG.md|LICENSE|README.md|REQUIREMENTS.md|SCHEDULING.md|TODO.md|ARCHITECTURE.md|spec-ihm.md|pom.xml|createArchive.sh)
       return 0 ;;
-    batch/*|config/*|web/*)
+    .github/*|batch/*|config/*|scripts/*|web/*)
       return 0 ;;
     *)
       return 1 ;;
