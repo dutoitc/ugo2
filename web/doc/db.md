@@ -1,56 +1,62 @@
-# Structure de la base UGO2
+# Base de données UGO2
 
-Une base MariaDB distincte est utilisée pour chaque webTV. Toutes les dates métier sont stockées en UTC.
+UGO2 utilise MariaDB. Toutes les dates métier sont stockées en UTC et chaque instance utilise une base distincte.
 
-## Tables métier
+## Modèle métier
+
+```mermaid
+erDiagram
+    video ||--o{ source_video : regroupe
+    source_video ||--o{ metric_snapshot : mesure
+    source_video ||--o{ reconcile_override : corrige
+    video ||--o{ reconcile_override : cible
+```
+
+| Table | Clé ou contrainte | Rôle |
+|---|---|---|
+| `video` | `id`, `slug` unique | Vidéo canonique. |
+| `source_video` | `(platform, platform_video_id)` unique | Publication d’une plateforme, éventuellement rattachée à une vidéo. |
+| `metric_snapshot` | `(source_video_id, snapshot_at)` unique | Métriques cumulées et engagement à un instant. |
+| `reconcile_override` | FK source et cible facultative | Actions `LINK`/`UNLINK` en attente. |
+
+## Exploitation
 
 | Table | Rôle |
 |---|---|
-| `video` | Vidéo canonique. Plusieurs publications multi-plateformes peuvent y être rattachées. |
-| `source_video` | Publication identifiée par `(platform, platform_video_id)`. |
-| `metric_snapshot` | Mesure horodatée d’une source : vues, audience, engagement et temps de visionnage. |
-| `reconcile_override` | Correction manuelle de la réconciliation : lien ou séparation. |
+| `platform_health` | Dernier succès/échec, snapshot, durée, volume et état du token par plateforme. |
+| `batch_run` | État minimal des exécutions du batch. |
+| `refresh_job_state` | État sale/propre, durée, dernier succès et erreur assainie du refresh. |
 
-```text
-video 1 ---- n source_video 1 ---- n metric_snapshot
-```
+## Lectures analytiques réellement utilisées
 
-## Vues et tables analytiques
-
-| Objet | Utilisation |
+| Objet | Consommateur |
 |---|---|
-| `v_metric_snapshot_enriched` | Snapshot enrichi avec plateforme, vidéo canonique et ratios calculés. |
-| `v_source_latest_snapshot` | Dernier snapshot de chaque source. |
-| `v_source_latest_enriched` | Dernier snapshot enrichi de chaque source. |
-| `v_video_last_snapshot` | Date de dernière mesure par vidéo canonique. |
-| `mv_video_rollup` | Dernières métriques agrégées par vidéo et plateforme pour la liste et les tris. |
-| `mv_video_views_aligned_*` | Séries alignées sur la publication pour les graphes comparatifs. |
-| `mv_video_views_percentiles` | Bandes de référence calculées sur plusieurs vidéos. |
-| `mv_refresh_control` | Contrôle historique du refresh analytique. |
-| `refresh_job_state` | État sale/propre, verrou logique, durée et dernière erreur du refresh. |
-| `platform_health` | Dernier succès, erreur, durée, fraîcheur et état du token par plateforme. |
-| `batch_run` | Historique minimal des exécutions du batch. |
+| `v_metric_snapshot_enriched` | Détail, tendances et séries intégrées au détail. |
+| `v_source_latest_snapshot` / `v_source_latest_enriched` | Dernier état de chaque source. |
+| `v_video_last_snapshot` | Date de dernière mesure dans la liste. |
+| `mv_video_rollup` | Liste, totaux, filtres et tris. |
+| `mv_video_views_aligned_hour_raw` | Points horaires alignés sur la publication. |
+| `mv_video_views_aligned_dense` | Série densifiée utilisée pour les comparaisons. |
+| `mv_video_views_percentiles` | Bandes de percentiles des graphes. |
+| `mv_refresh_control` | Horodatage historique du refresh du rollup. |
 
-## Règles d’intégrité
+`MaterializedViewsSql.php` crée et remplit les trois tables `mv_video_views_*`. `MaterializedRefreshService` et `HealthStateService` assurent encore du `CREATE TABLE IF NOT EXISTS` au démarrage ; ce DDL à la volée est suivi dans `TODO.md`.
 
-- `(platform, platform_video_id)` est unique dans `source_video`.
-- `(source_video_id, snapshot_at)` est unique dans `metric_snapshot`.
-- `views_native` et `total_watch_seconds` ne diminuent pas pour une même source.
-- `NULL` signifie « non reçu/inconnu » ; zéro doit représenter une vraie mesure.
-- Un snapshot est conservé au premier point, pour un delta significatif, un changement utile ou le garde-fou quotidien.
-- Les ingestions marquent les vues comme sales ; `batch:run` déclenche un refresh unique en fin d’exécution.
+## Intégrité applicative
+
+- `null` signifie « inconnu » et ne remplace pas une valeur connue.
+- `views_native` et `total_watch_seconds` sont corrigés s’ils régressent.
+- Un snapshot n’est stocké que pour un premier point, une mise à jour au même instant, un delta significatif, un changement utile ou le garde-fou quotidien.
+- Le refresh est marqué sale à l’ingestion et exécuté sous verrou MariaDB.
 
 ## Scripts SQL
 
-```text
-001_schema.sql                    schéma initial — destructif, base vide uniquement
-002_views.sql                     vues analytiques initiales
-003_indexes.sql                   index complémentaires
-004_reconcile.sql                 corrections manuelles
-005_views_fallback_on_reach.sql   vues avec fallback reach
-006_performances.sql              rollup et contrôle historique de refresh
-007_graph_views.sql               structures des graphes
-008_health_sparse_refresh.sql     santé, batches et refresh différé
-```
+| Scripts | Contenu |
+|---|---|
+| `001`–`004` | Tables métier, vues initiales, index et overrides. |
+| `005`–`007` | Fallback `reach`, rollup et premières structures de graphes. |
+| `008` | Santé, exécutions batch et état du refresh. |
 
-Les scripts historiques ne constituent pas encore une chaîne de migration sûre. Le remplacement par des migrations versionnées reste un MUST.
+Ces fichiers sont un bootstrap historique, pas une chaîne de migrations. `001` et `004` suppriment des tables ; d’autres scripts recréent des vues ou des tables non idempotentes. Ils sont réservés à une base vide et ne doivent pas être appliqués automatiquement à une base contenant des données.
+
+Une vue relationnelle maintenue se trouve dans [`db.puml`](db.puml). Les anciens PNG non générés automatiquement ne font pas foi.

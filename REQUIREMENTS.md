@@ -1,5 +1,7 @@
 # Exigences UGO2
 
+Ce document décrit la cible fonctionnelle et non fonctionnelle. Les écarts du code actuel, notamment l’authentification des mutations, les migrations et certains tests, sont suivis dans `TODO.md`.
+
 ## Objectif
 
 Centraliser les statistiques vidéo de deux webTV indépendantes, rapprocher une même vidéo publiée sur plusieurs plateformes et conserver un historique fiable sans gonfler inutilement la base.
@@ -29,9 +31,9 @@ Centraliser les statistiques vidéo de deux webTV indépendantes, rapprocher une
 - Une base MariaDB, une configuration batch et un déploiement web par webTV.
 - Le batch Java appelle l’API PHP ; il ne se connecte pas directement à la DB.
 - Le front Angular consomme uniquement l’API PHP.
-- Les builds générés et configurations réelles restent hors Git.
+- Les configurations réelles restent hors Git. Le build Angular de déploiement est actuellement versionné dans `web/src/front/`.
 
-## Sécurité
+## Sécurité cible
 
 - Toutes les routes modifiant les données sont protégées par HMAC.
 - Les signatures ont une durée de validité courte et une protection anti-rejeu.
@@ -52,7 +54,7 @@ Centraliser les statistiques vidéo de deux webTV indépendantes, rapprocher une
 - Les opérations de nettoyage DB proposent un mode `dry-run` et un rapport avant modification.
 - Les évolutions DB utilisent des migrations versionnées et non des scripts destructifs réexécutés manuellement.
 
-## Critères minimaux de validation
+## Critères minimaux de validation cible
 
 - Tests unitaires batch et PHP sur auth, monotonie, zéro temporaire, parcimonie et tri.
 - Build Angular réussi.

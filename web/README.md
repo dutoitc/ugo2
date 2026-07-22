@@ -1,21 +1,51 @@
-# UGO2 Web (single-root hosting)
+# UGO2 Web
 
-- Docroot = `web/`
-- API sous `/api/*` (routé vers `index.php`)
-- Code serveur: `src/back/` (bloqué par `.htaccess`), Config: `src/back/config/`
-- Front: `src/front/` (HTML/CSS/JS)
+Le dossier `web/` contient l’API PHP, le build Angular servi statiquement et les scripts SQL.
 
-## Déploiement
-1) Copier `src/back/config/config.php.tmpl` -> `src/back/config/config.php.site1` (et `.site2` etc.), remplir DB + clés HMAC.
-2) Importer SQL: `sql/001_schema.sql`, `002_views.sql`, `003_indexes.sql`.
-3) Éditer en haut de `up.sh` (utilisateur/host/dir + CONFIG_VARIANT), rendre exécutable `chmod +x up.sh`.
-4) `./up.sh`
+## Arborescence
 
-## Nettoyage avant mise à jour
-Si tu viens d'un ancien layout:
-  - supprime `web/public/` et `web/src/` existants
-  - supprime `web/index.php`, `web/.htaccess` si présents (ils seront recréés)
-  - supprime `web/sql/` (sera recréé)
+| Chemin | Contenu |
+|---|---|
+| `index.php` | Point d’entrée de l’API et fallback de la SPA. |
+| `src/back/` | PHP 8, contrôleurs, services et accès PDO. |
+| `src/front/` | Build Angular généré. |
+| `ihm/` | Sources Angular. |
+| `sql/` | Bootstrap SQL historique. |
+| `doc/` | Contrats API et modèle DB. |
 
-Commande rapide (Git Bash) :
-rm -rf web/public web/src web/sql; rm -f web/index.php web/.htaccess web/README.md
+Le docroot du serveur web doit être ce dossier. `.htaccess` bloque l’accès direct à `src/back`, `sql` et `doc`, puis route `/api/*` vers `index.php`.
+
+## Configuration locale
+
+```bash
+cp src/back/config/config.php.tmpl src/back/config/config.php
+```
+
+Renseigner la connexion MariaDB et les clés HMAC uniquement dans `config.php`, qui n’est pas versionné. Le modèle conserve exclusivement des exemples neutres.
+
+## Build frontend
+
+```bash
+cd ihm
+npm ci
+npm audit --omit=dev --audit-level=moderate
+npm run build
+```
+
+Le résultat remplace les fichiers générés de `src/front/`.
+
+## Base de données
+
+Les scripts `sql/001` à `008` sont un bootstrap historique pour une base vide. Ils ne constituent pas des migrations de production : certains suppriment ou recréent des tables et vues. Ne jamais les rejouer sur une base contenant des données ; sauvegarder et examiner le SQL avant toute initialisation.
+
+Voir [`doc/db.md`](doc/db.md) pour les objets réellement utilisés.
+
+## Vérification non destructive
+
+Après avoir démarré une instance locale ou de test :
+
+```bash
+./testui.sh http://localhost:8080
+```
+
+Le script ne fait que trois lectures : la SPA, `/api/v1/health` et `/api/v1/videos`. Aucun déploiement distant n’est automatisé par ce dépôt.

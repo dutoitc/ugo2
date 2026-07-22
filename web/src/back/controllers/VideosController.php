@@ -292,26 +292,4 @@ final class VideosController
         $result = $service->refreshIfDirty(true);
         \Web\Lib\Http::json(['ok' => true, 'refresh' => $result], 200);
     }
-
-
-    public function refreshVideoTimeSeries(): void {
-        $pdo = $this->pdo();
-        $repo = new VideosRepository($pdo);
-        try {
-            $repo->refreshVideoTimeSeries();
-            Http::json(['ok' => true], 200);
-
-        } catch (\Throwable $e) {
-            error_log('[timeseries:refresh] '.SensitiveData::throwable($e));
-            Http::json([
-                'error' => 'refresh_failed',
-            ], 500);
-        }
-    }
-
-
-
-
-
-
 }
