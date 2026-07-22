@@ -26,26 +26,22 @@ hs_err_pid*
 replay_pid*
 
 /notes.txt
-/web/up-capstv
-/web/up-capstv-back
-/web/up-xplore
-/web/up-xplore-back
+/web/up-*
 /web/*.properties
 /web/src/back/config/config.php
 /web/src/back/config/config.php.*
-/web/up-capstv.sh
+/web/up-*.sh
 /batch/src/main/resources/application.properties
 /.ugo2
 chk.php
 /batch/src/test/resources/real.properties
-/web/testui-capstv.sh
+/web/testui-*.sh
 /web/myconnectweb.sh
 t
 /web/src/back/controllers/t
 /batch/src/main/java/ch/mno/ugo2/facebook/t
 /deploy.sh
 /.idea/uiDesigner.xml
-/batch/src/main/resources/application-capstv.properties
-/batch/src/main/resources/application-xplore.properties
+/batch/src/main/resources/application-*.properties
 
 /files.txt

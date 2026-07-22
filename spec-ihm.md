@@ -373,7 +373,7 @@
 * **Dates/TZ**: **Luxon 3.x** (`luxon`) — conversion UTC → Europe/Zurich, formatage local, durations
 * **HTTP**: Angular `HttpClient` + Interceptor (headers communs, gestion erreurs)
 * **État**: **Angular Signals** (stores maison légers) + RxJS 7.8 (streams HTTP)
-* **Styles**: **SCSS** (variables + mixins). **Pas de Bootstrap**. Thème perso (bleu logo CAPStv)
+* **Styles**: **SCSS** (variables + mixins). **Pas de Bootstrap**. Thème bleu neutre.
 * **Icônes**: **Material Symbols** (webfont) — pas de dépendance `@angular/material` obligatoire
 * **i18n**: Angular i18n (fr par défaut), nombres via `Intl.NumberFormat`
 
@@ -481,7 +481,7 @@ Pour chaque vidéo, calculer sur **72h** glissantes, fenêtre par défaut **24h*
 
 ## 5) UX/UI & design system
 
-* Thème bleu (couleurs proches logo CAPStv). Variables CSS: `--primary`, `--primary-600`, `--accent`, `--bg`, `--text`.
+* Thème bleu neutre. Variables CSS: `--primary`, `--primary-600`, `--accent`, `--bg`, `--text`.
 * Layout responsive:
 
     * Mobile: colonnes essentielles (Titre, Type, Total, Dernière mesure). Toggle “+” pour voir les plateformes.
@@ -525,27 +525,27 @@ Pour chaque vidéo, calculer sur **72h** glissantes, fenêtre par défaut **24h*
 
 ```bash
 # Liste vidéos
-curl -s "https://ugo2.capstv.ch/api/v1/videos?page=1&pageSize=50&sort=total_views:desc"
+curl -s "https://video-stats.example.org/api/v1/videos?page=1&pageSize=50&sort=total_views:desc"
 
 # Détail + séries
-curl -s "https://ugo2.capstv.ch/api/v1/videos/42"
-curl -s "https://ugo2.capstv.ch/api/v1/videos/42/metrics?source=YT&metric=views&from=2025-09-03T00:00:00Z&to=2025-09-06T00:00:00Z&bucket=1h"
+curl -s "https://video-stats.example.org/api/v1/videos/42"
+curl -s "https://video-stats.example.org/api/v1/videos/42/metrics?source=YT&metric=views&from=2025-09-03T00:00:00Z&to=2025-09-06T00:00:00Z&bucket=1h"
 
 # Overview
-curl -s "https://ugo2.capstv.ch/api/v1/overview"
+curl -s "https://video-stats.example.org/api/v1/overview"
 
 # Alerts
-curl -s "https://ugo2.capstv.ch/api/v1/alerts?window=24h&limit=20"
+curl -s "https://video-stats.example.org/api/v1/alerts?window=24h&limit=20"
 
 # Comparateur & baseline
-curl -s "https://ugo2.capstv.ch/api/v1/videos:last"
-curl -s "https://ugo2.capstv.ch/api/v1/metrics/baseline?window=365d&sources=YT,FB&align=publication"
+curl -s "https://video-stats.example.org/api/v1/videos:last"
+curl -s "https://video-stats.example.org/api/v1/metrics/baseline?window=365d&sources=YT,FB&align=publication"
 
 # Explorateur
-curl -s "https://ugo2.capstv.ch/api/v1/metrics:explore?videoId=42&source=YT&metric=views&from=2025-09-01T00:00:00Z&to=2025-09-06T00:00:00Z&page=1&pageSize=200"
+curl -s "https://video-stats.example.org/api/v1/metrics:explore?videoId=42&source=YT&metric=views&from=2025-09-01T00:00:00Z&to=2025-09-06T00:00:00Z&page=1&pageSize=200"
 
 # Santé
-curl -s "https://ugo2.capstv.ch/api/v1/health"
+curl -s "https://video-stats.example.org/api/v1/health"
 ```
 
 ---

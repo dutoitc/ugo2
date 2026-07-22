@@ -1,3 +1,9 @@
+.brand img {
+  display: block;
+  height: 36px;
+  width: auto;
+}
+
 .site-alerts {
   display: grid;
   gap: 4px;

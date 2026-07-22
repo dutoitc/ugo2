@@ -6,7 +6,6 @@ Uniquement les travaux restant à réaliser, classés par priorité.
 
 - [ ] Protéger toutes les mutations : HMAC côté serveur avec anti-rejeu/idempotence pour le batch, authentification distincte pour l’administration IHM, aucune mutation en `GET`, tests de rejet inclus.
 - [ ] Empêcher toute fuite de secret : masquer tokens, clés, URL signées et corps sensibles dans les logs, erreurs API et états de santé ; automatiser le scan des commits et archives.
-- [ ] Supprimer les références aux instances réelles (`CAPStv`, `Xplore`) et remplacer domaines, identifiants, logos, fixtures et configurations par des exemples neutres.
 - [ ] Corriger les vulnérabilités npm Angular/ECharts, supprimer le chargement CDN redondant et valider `npm audit` + build.
 - [ ] Sécuriser la résolution des doublons : valider les relations et lignes affectées, garantir la transaction et interdire toute suppression ambiguë.
 - [ ] Uniformiser les contrats des routes d’écriture : JSON validé, réponse réellement sérialisée, codes HTTP stables et erreurs internes non exposées.

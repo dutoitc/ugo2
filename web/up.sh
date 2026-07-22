@@ -60,7 +60,7 @@ if [[ "$REMOTE_DIR" == "~/"* ]]; then
   REMOTE_IS_TILDE=1
 else
   if [[ "${REMOTE_DIR:0:1}" != "/" ]] || [[ "$REMOTE_DIR" == "/" ]] || [[ ${#REMOTE_DIR} -lt 5 ]]; then
-    echo "REMOTE_DIR invalide: '$REMOTE_DIR' (abs. requis, ex: /sites/ugo2.capstv.ch)" >&2; exit 3
+    echo "REMOTE_DIR invalide: '$REMOTE_DIR' (abs. requis, ex: /sites/video-stats.example.org)" >&2; exit 3
   fi
 fi
 [[ "${REMOTE_DIR: -1}" == "/" ]] || REMOTE_DIR="${REMOTE_DIR}/"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # testui.sh v3.1 — UGO2 checks avec variantes anti-WAF
-# Usage: ./testui.sh https://ugo2.capstv.ch [--verbose] [--insecure] [--no-color] [--only=ping,index,health,filter]
+# Usage: ./testui.sh https://video-stats.example.org [--verbose] [--insecure] [--no-color] [--only=ping,index,health,filter]
 
 BASE_URL="${1:-}"
 shift || true

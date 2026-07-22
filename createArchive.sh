@@ -54,7 +54,7 @@ is_excluded_path() {
     web/src/back/config/config.php|web/src/back/config/config.php.*)
       [[ "$1" == *.tmpl ]] && return 1
       return 0 ;;
-    web/up-capstv*|web/up-xplore*|web/myconnectweb.sh|web/testui-capstv.sh)
+    web/up-*|web/myconnectweb.sh|web/testui-*.sh)
       return 0 ;;
     *)
       return 1 ;;

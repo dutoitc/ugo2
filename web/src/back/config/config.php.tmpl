@@ -1,13 +1,25 @@
 <?php
+declare(strict_types=1);
+
 return [
   'db' => [
-    'host' => 'sqlXX.infomaniak.com',
+    'host' => 'db.example.org',
     'port' => 3306,
-    'name' => 'ugo2_prod',
-    'user' => 'ugo2_user',
-    'pass' => 'REPLACE_ME_SECURE',
+    'name' => 'ugo2_example',
+    'user' => 'ugo2_example',
+    'pass' => 'REPLACE_WITH_DATABASE_PASSWORD',
   ],
   'ingestKeys' => [
-    'tenant1-batch' => 'REPLACE_ME_LONG_RANDOM_SECRET',
+    'tenant-example-batch' => 'REPLACE_WITH_LONG_RANDOM_SECRET',
+  ],
+  'metrics' => [
+    'minDeltaAbs' => 10,
+    'minDeltaRel' => 0.01,
+    'dailyGuard' => true,
+  ],
+  'health' => [
+    'staleWarningHours' => 26,
+    'staleCriticalHours' => 72,
+    'tokenWarningDays' => 14,
   ],
 ];
