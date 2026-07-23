@@ -1,5 +1,6 @@
 package ch.mno.ugo2.cli;
 
+import ch.mno.ugo2.util.SensitiveDataRedactor;
 import ch.mno.ugo2.api.WebApiClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,7 +35,7 @@ public class SanityCheckCommand implements Callable<Integer> {
             System.out.println("Sanity check: OK");
             return 0;
         } catch (Exception e) {
-            System.err.println("Sanity check: FAIL -> " + e.getMessage());
+            System.err.println("Sanity check: FAIL -> " + SensitiveDataRedactor.redact(e));
             return 1;
         }
     }

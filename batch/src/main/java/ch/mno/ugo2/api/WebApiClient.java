@@ -3,6 +3,7 @@ package ch.mno.ugo2.api;
 import ch.mno.ugo2.dto.MetricsUpsertItem;
 import ch.mno.ugo2.dto.OverrideItem;
 import ch.mno.ugo2.dto.SourceUpsertItem;
+import ch.mno.ugo2.util.SensitiveDataRedactor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -104,7 +105,8 @@ public class WebApiClient {
                     return out;
                 })
                 .doOnError(WebClientResponseException.class, e ->
-                        log.warn("API {} -> {} body={}", path, e.getRawStatusCode(), e.getResponseBodyAsString()));
+                        log.warn("API {} -> {} body={}", path, e.getRawStatusCode(),
+                                SensitiveDataRedactor.redactAndTruncate(e.getResponseBodyAsString(), 1000)));
     }
 
     /**
@@ -159,7 +161,8 @@ public class WebApiClient {
         }
         return resp.bodyToMono(String.class).defaultIfEmpty("")
                 .flatMap(b -> {
-                    log.warn("API {} -> {} body={}", path, code, b);
+                    log.warn("API {} -> {} body={}", path, code,
+                            SensitiveDataRedactor.redactAndTruncate(b, 1000));
                     return Mono.error(new RuntimeException("API " + path + " failed: " + code));
                 });
     }

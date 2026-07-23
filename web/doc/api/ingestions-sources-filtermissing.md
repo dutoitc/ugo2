@@ -1,20 +1,28 @@
 
-### `POST /api/v1/sources:filterMissing`
-#### Description:
+# Filtrer les sources absentes
+
+## `POST /api/v1/sources:filterMissing`
+
 Vérifie quelles sources sont absentes de la base avant un import massif.
-#### Entrées tolérées:
+
+### Entrées tolérées
+
 ```json
-{ "platform":"YOUTUBE", "ids":[...] }  
-{ "platform":"YOUTUBE", "platformIds":[...] }
-{ "sources":[{"platform":"YOUTUBE","platformId":"..."}] }
+{ "platform": "YOUTUBE", "ids": ["video-example-1", "video-example-2"] }
 ```
-#### Retour: IDs absents de source_video
+
+Les clés `platformIds` ou `sources[].platformId` sont aussi acceptées.
+
+### Réponse
+
 ```json
 {
   "platform": "YOUTUBE",
-  "requestedCount": 100,
-  "existingCount": 98,
-  "missingCount": 22,
-  "missing": [44, 45]
+  "requestedCount": 2,
+  "existingCount": 1,
+  "missingCount": 1,
+  "missing": ["video-example-2"]
 }
 ```
+
+Cette route fait une lecture mais reste un appel interne `POST`. L’authentification HMAC n’est pas encore imposée côté serveur.

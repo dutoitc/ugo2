@@ -7,6 +7,7 @@ use Web\Db;
 use Web\Domain\MetricsSnapshot;
 use Web\Repositories\SourceVideoRepository;
 use Web\Repositories\MetricsSnapshotRepository;
+use Web\Lib\SensitiveData;
 
 final class MetricsIngestService
 {
@@ -91,7 +92,7 @@ final class MetricsIngestService
                     ];
                 } catch (\Throwable $e) {
                     $ko++;
-                    $items[] = ['i'=>$i, 'status'=>'error', 'message'=>$e->getMessage()];
+                    $items[] = ['i'=>$i, 'status'=>'error', 'message'=>SensitiveData::redact($e->getMessage())];
                 }
             }
             $this->pdo->commit();

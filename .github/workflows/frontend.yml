@@ -1,0 +1,33 @@
+name: Frontend
+
+on:
+  pull_request:
+    paths:
+      - 'web/ihm/**'
+      - '.github/workflows/frontend.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'web/ihm/**'
+      - '.github/workflows/frontend.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-and-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/ihm
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/ihm/package-lock.json
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=moderate
+      - run: npm run build

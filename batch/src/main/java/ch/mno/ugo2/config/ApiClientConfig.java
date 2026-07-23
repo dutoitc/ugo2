@@ -1,6 +1,7 @@
 package ch.mno.ugo2.config;
 
 import ch.mno.ugo2.api.WebApiClient;
+import ch.mno.ugo2.util.SensitiveDataRedactor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -48,7 +49,7 @@ public class ApiClientConfig {
 
     protected ExchangeFilterFunction maskedRequestLog() {
         return ExchangeFilterFunction.ofRequestProcessor((ClientRequest req) -> {
-            String u = req.url().toString().replaceAll("([?&]key=)[^&]+", "$1***");
+            String u = SensitiveDataRedactor.redact(req.url().toString());
             log.debug("HTTP -> {} {}", req.method(), u);
             return Mono.just(req);
         });

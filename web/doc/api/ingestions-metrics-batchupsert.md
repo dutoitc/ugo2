@@ -10,7 +10,7 @@ Importe un lot de métriques et rattache chaque point à une source par `(platfo
     {
       "platform": "YOUTUBE",
       "platform_format": "VIDEO",
-      "platform_video_id": "abc123",
+      "platform_video_id": "video-example-1",
       "snapshot_at": "2026-07-13T12:00:00Z",
       "views_native": 10500,
       "likes": 340,
@@ -59,3 +59,5 @@ Importe un lot de métriques et rattache chaque point à une source par `(platfo
 ```
 
 Raisons possibles : `first_snapshot`, `same_timestamp_update`, `views_delta`, `useful_metric_changed`, `daily_guard`, `below_threshold` et `out_of_order`.
+
+L’authentification HMAC n’est pas encore imposée côté serveur ; cette route doit rester interne.

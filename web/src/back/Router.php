@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Web;
 
 use Web\Lib\Http;
+use Web\Lib\SensitiveData;
 
 final class Router
 {
@@ -41,13 +42,9 @@ final class Router
             // Lecture
             ['GET',  '/api/v1/videos',                ['Web\\Controllers\\VideosController', 'list']],
             ['GET',  '/api/v1/video',                 ['Web\\Controllers\\VideosController', 'get']],
-            ['GET',  '/api/v1/refreshMV',             ['Web\\Controllers\\VideosController', 'refreshMV']],
             ['POST', '/api/v1/refresh:run',           ['Web\\Controllers\\VideosController', 'refreshMV']],
-            ['GET',  '/api/v1/refreshVideoTimeSeries',['Web\\Controllers\\VideosController', 'refreshVideoTimeSeries']],
             ['GET',  '/api/v1/duplicates',            ['Web\\Controllers\\VideosController', 'duplicates']],
             ['POST', '/api/v1/duplicates:resolve',    ['Web\\Controllers\\VideosController', 'resolveDuplicate']],
-            ['GET',  '/api/v1/aggregates/presenters', ['Web\\Controllers\\AggregatesController', 'presenters']],
-            ['GET',  '/api/v1/aggregates/directors',  ['Web\\Controllers\\AggregatesController', 'realisateurs']],
         ];
     }
 
@@ -130,10 +127,10 @@ final class Router
             }
 
             // 404
-            Http::json(['error' => 'not_found', 'path' => $path], 404);
+            Http::json(['error' => 'not_found'], 404);
         } catch (\Throwable $e) {
-            error_log('[API] ERROR ' . $e->getMessage());
-            Http::json(['error' => 'internal_error', 'message' => $e->getMessage()], 500);
+            error_log('[API] ERROR ' . SensitiveData::throwable($e));
+            Http::json(['error' => 'internal_error'], 500);
         }
     }
 }

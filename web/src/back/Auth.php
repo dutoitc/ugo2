@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 namespace Web;
 
+use Web\Lib\Http;
+use Web\Lib\SensitiveData;
+
 final class Auth {
   /** @var array<string,string> keyId => secret */
   private array $keys;
@@ -63,7 +66,8 @@ public function guardIngest(callable $handler) {
     $payload = $handler();
   } catch (\Throwable $e) {
     $code = 500;
-    $payload = ['error'=>'server_error','message'=>$e->getMessage()];
+    error_log('[auth] '.SensitiveData::throwable($e));
+    $payload = ['error'=>'server_error'];
   }
 
   $jsonHeader();
@@ -74,7 +78,9 @@ public function guardIngest(callable $handler) {
     try {
       $ins = $this->db->pdo()->prepare("INSERT INTO api_idempotency(idem_key,route,request_hash,response_code,response_body) VALUES(?,?,?,?,?)");
       $ins->execute([$idem, $path, $bodyHash, $code, $bodyOut]);
-    } catch (\Throwable $e) { /* ignore */ }
+    } catch (\Throwable $e) {
+      error_log('[auth:idempotency] '.SensitiveData::throwable($e));
+    }
   }
 
   echo $bodyOut;

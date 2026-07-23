@@ -32,7 +32,7 @@ class DummyTest {
 
     @Test
     void testX() {
-        var videoId = "1505594320630897"; // reel
+        var videoId = "1000000000000000"; // synthetic reel id
 
         // Appel réel
         var video = client.video("v23.0", videoId, token).block();

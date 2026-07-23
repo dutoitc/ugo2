@@ -1,6 +1,7 @@
 // batch/src/main/java/ch/mno/ugo2/facebook/FacebookCollectorService.java
 package ch.mno.ugo2.facebook;
 
+import ch.mno.ugo2.util.SensitiveDataRedactor;
 import ch.mno.ugo2.config.FacebookProps;
 import ch.mno.ugo2.dto.MetricsUpsertItem;
 import ch.mno.ugo2.dto.SourceUpsertItem;
@@ -43,7 +44,7 @@ public class FacebookCollectorService {
                 successfulPages++;
             } catch (Exception e) {
                 lastPageError = e;
-                log.warn("[FB] page {}: {}", pageId, e.toString());
+                log.warn("[FB] page {}: {}", pageId, SensitiveDataRedactor.redact(e));
             }
         }
         if (successfulPages == 0 && lastPageError != null) {
@@ -83,7 +84,7 @@ public class FacebookCollectorService {
                                         })
                                         .onErrorResume(ex -> {
                                             lastError.set(ex);
-                                            log.warn("[FB] skip id={} cause={}", id, ex.toString());
+                                            log.warn("[FB] skip id={} cause={}", id, SensitiveDataRedactor.redact(ex));
                                             return Mono.empty();
                                         })
                         , /*concurrency*/ 6)
@@ -206,7 +207,7 @@ public class FacebookCollectorService {
             log.info("FindUploaded returned {}", uploaded.size());
             return uploaded;
         } catch (Exception e) {
-            log.warn("[FB] page {} /videos?type=uploaded failed: {}", pageId, e.toString());
+            log.warn("[FB] page {} /videos?type=uploaded failed: {}", pageId, SensitiveDataRedactor.redact(e));
         }
         return List.of();
     }
@@ -220,7 +221,7 @@ public class FacebookCollectorService {
             log.info("FindReels returned {}", reels.size());
             return reels;
         } catch (Exception e) {
-            log.warn("[FB] page {} /videos?type=reels failed: {}", pageId, e.toString());
+            log.warn("[FB] page {} /videos?type=reels failed: {}", pageId, SensitiveDataRedactor.redact(e));
         }
         return List.of();
     }

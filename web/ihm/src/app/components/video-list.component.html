@@ -99,7 +99,7 @@
       <td class="date center">{{ toZurichDate(v.published_at) }}</td>
 
       <td class="title center">
-        <a [href]="'/v/' + (v.slug || v.id)">{{ v.title }}</a>
+        <a [href]="'/v/' + v.id">{{ v.title }}</a>
       </td>
 
       <td [ngClass]="vpBg(v, 'SUM')">

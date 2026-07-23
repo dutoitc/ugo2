@@ -1,7 +1,7 @@
+# Ingestion des sources
 
-___
-### `POST /api/v1/sources:batchUpsert`
-#### Description :
+## `POST /api/v1/sources:batchUpsert`
+
 Upsert de sources dans source_video. Contrainte d’unicité: (platform, platform_video_id).
 Chaque item tolère plusieurs alias d’entrée et est inséré ou mis à jour.
 
@@ -16,31 +16,31 @@ Chaque item tolère plusieurs alias d’entrée et est inséré ou mis à jour.
 - duration_seconds: entier optionnel.
 - is_active: fixé à 1 lors de l’insert; reste à 1 lors de l’update via l’upsert (cf. SQL).
 
-#### Entrée exemple:
+### Exemple
+
 ```json
 {
   "sources": [
     {
       "platform": "YOUTUBE",
-      "platform_video_id": "abc123",
+      "platform_video_id": "video-example-1",
       "platform_format": "VIDEO",
-      "platform_channel_id": "UCxxxx",
-      "title": "Titre",
-      "description": "Texte…",
-      "url": "https://youtube.com/watch?v=abc123",
-      "etag": "etag-xyz",
-      "published_at": "2025-10-09T12:00:00Z",
+      "platform_channel_id": "channel-example-1",
+      "title": "Vidéo exemple",
+      "description": "Description neutre",
+      "url": "https://media.example.org/videos/video-example-1",
+      "etag": "etag-example-1",
+      "published_at": "2026-07-13T12:00:00Z",
       "duration_seconds": 120
     }
   ]
 }
 ```
-Alias acceptés — exemples équivalents
-```json
-{ "sources": [ { "platform":"FACEBOOK", "platformId":"123_456", "media_type":"REEL", "permalink_url":"https://fb…"} ] }
-{ "sources": [ { "platform":"INSTAGRAM", "id":"IGVID_789", "publishedAt":"2025-10-09T12:00:00Z" } ] }
-```
-Réponse
+
+### Réponse
+
 ```json
 { "ok": true, "inserted": 10, "updated": 5, "skipped": 2 }
 ```
+
+L’authentification HMAC n’est pas encore imposée côté serveur ; cette route doit rester interne.

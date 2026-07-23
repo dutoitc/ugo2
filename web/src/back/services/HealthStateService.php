@@ -5,6 +5,7 @@ namespace Web\Services;
 
 use PDO;
 use Web\Db;
+use Web\Lib\SensitiveData;
 
 final class HealthStateService
 {
@@ -81,7 +82,7 @@ final class HealthStateService
         ");
         $st->execute([
             $platform,
-            substr($message, 0, 1000),
+            SensitiveData::redact($message),
             $durationMs,
             $status,
             $this->toMysqlUtc($tokenExpiresAt),
@@ -98,7 +99,7 @@ final class HealthStateService
         $finishedAt = $this->toMysqlUtc($event['finished_at'] ?? null);
         $durationMs = isset($event['duration_ms']) ? max(0, (int)$event['duration_ms']) : null;
         $items = isset($event['items']) ? max(0, (int)$event['items']) : null;
-        $error = isset($event['message']) ? substr((string)$event['message'], 0, 1000) : null;
+        $error = isset($event['message']) ? SensitiveData::redact((string)$event['message']) : null;
 
         $st = $this->pdo->prepare("
             INSERT INTO batch_run
@@ -155,6 +156,7 @@ final class HealthStateService
             $successAgeHours = $this->ageHours($lastSuccess);
             $tokenExpiresAt = $health['token_expires_at'] ?? null;
             $tokenStatus = strtoupper((string)($health['token_status'] ?? 'UNKNOWN'));
+            $lastError = SensitiveData::redact(isset($health['last_error']) ? (string)$health['last_error'] : null);
             $status = 'OK';
             $messages = [];
 
@@ -182,10 +184,10 @@ final class HealthStateService
                     : sprintf('Token %s expiré ou refusé par la plateforme.', $platform);
             } elseif ($tokenStatus === 'ERROR') {
                 $status = 'ERROR';
-                $messages[] = sprintf('%s : %s', $platform, $health['last_error'] ?? 'erreur de collecte');
-            } elseif ($health['last_error'] ?? null) {
+                $messages[] = sprintf('%s : %s', $platform, $lastError ?? 'erreur de collecte');
+            } elseif ($lastError !== null) {
                 if ($status === 'OK') $status = 'WARNING';
-                $messages[] = sprintf('%s : %s', $platform, $health['last_error']);
+                $messages[] = sprintf('%s : %s', $platform, $lastError);
             }
 
             if ($sourceCount > 0 && $lastSnapshot === null) {
@@ -234,7 +236,7 @@ final class HealthStateService
                 'last_duration_ms' => isset($health['last_duration_ms']) ? (int)$health['last_duration_ms'] : null,
                 'last_items' => isset($health['last_items']) ? (int)$health['last_items'] : null,
                 'last_error_at' => $health['last_error_at'] ?? null,
-                'last_error' => $health['last_error'] ?? null,
+                'last_error' => $lastError,
                 'source_count' => $sourceCount,
                 'message' => $messages[0] ?? null,
             ];
@@ -246,6 +248,9 @@ final class HealthStateService
             ORDER BY started_at DESC
             LIMIT 1
         ")->fetch(PDO::FETCH_ASSOC) ?: null;
+        if (is_array($batch) && isset($batch['error'])) {
+            $batch['error'] = SensitiveData::redact((string)$batch['error']);
+        }
 
         $refresh = $this->pdo->query("
             SELECT name, dirty_since, last_started_at, last_success_at,
@@ -253,6 +258,9 @@ final class HealthStateService
             FROM refresh_job_state
             WHERE name = 'materialized_views'
         ")->fetch(PDO::FETCH_ASSOC) ?: null;
+        if (is_array($refresh) && isset($refresh['last_error'])) {
+            $refresh['last_error'] = SensitiveData::redact((string)$refresh['last_error']);
+        }
 
         return [
             'ok' => true,

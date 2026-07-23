@@ -4,66 +4,57 @@
 
 ```text
 YouTube / Facebook / Instagram
-              |
-              v
-      batch/ — Java 21 / Spring Boot
-      - découvre les vidéos
-      - collecte les métriques
-      - doit signer les appels HMAC
-              |
-              v
-      web/src/back/ — API PHP 8
-      - ingestion et validation
-      - réconciliation multi-plateformes
-      - lecture, agrégats et séries temporelles
-              |
-              v
-      MariaDB — une base par webTV
-      - video : vidéo canonique
-      - source_video : publication sur une plateforme
-      - metric_snapshot : mesure horodatée
-      - vues/tables analytiques : derniers états et graphes
-              |
-              v
-      web/ihm/ — Angular
-      - liste et tri des vidéos
-      - détail et graphes
-      - résolution des doublons
+               |
+               v
+       batch/ — Java 21
+  découverte, collecte, normalisation
+               |
+               | JSON sur /api/v1/*
+               v
+    web/src/back/ — PHP 8 + PDO
+ ingestion, réconciliation, lectures, santé
+               |
+               v
+             MariaDB
+               ^
+               |
+        web/ihm/ — Angular 20
+ listes, détail, graphes, doublons, santé
 ```
 
-## Modules
+## Responsabilités
 
-| Chemin | Responsabilité |
-|---|---|
-| `batch/` | Clients API, collecte, mapping et envoi vers l’API web. Aucune connexion directe à MariaDB. |
-| `web/src/back/` | API PHP, authentification des ingestions, accès DB, réconciliation et calculs. |
-| `web/ihm/` | Sources Angular. Le build généré va dans `web/src/front/` et ne doit pas être archivé pour une revue de code. |
-| `web/sql/` | Schéma, vues, index et tables analytiques. À convertir en migrations versionnées. |
-| `web/doc/` | Documentation API et DB. |
-| `config/` et `*.tmpl` | Exemples sans secret. Les configurations réelles restent hors Git. |
+| Module | Responsabilité | Ne fait pas |
+|---|---|---|
+| `batch/` | Appeler les APIs externes, mapper les réponses, envoyer des lots et rapports de santé. | Accéder directement à MariaDB. |
+| `web/src/back/` | Router les appels, valider les données, persister, réconcilier et produire les lectures. | Collecter directement les plateformes. |
+| `web/ihm/` | Consommer les lectures JSON et présenter les opérations disponibles. | Calculer ou persister les données métier. |
+| `web/sql/` | Décrire le schéma et les objets analytiques historiques. | Fournir aujourd’hui une chaîne de migration sûre. |
 
-## Flux principal
+## Flux d’un batch
 
-1. Le batch collecte les sources puis les métriques d’une webTV.
-2. Il envoie des lots JSON à l’API PHP. La signature HMAC existe dans le client, mais son usage systématique reste à finaliser (voir `TODO.md`).
-3. L’API upsert les sources et snapshots.
-4. La réconciliation rattache les publications multi-plateformes à une même `video`.
-5. Les agrégats alimentent la liste et les graphes Angular.
+1. Le batch découvre ou met à jour les `source_video`.
+2. Il envoie les `metric_snapshot` par lots.
+3. L’API préserve les valeurs inconnues, corrige les régressions de compteurs cumulés et ne conserve que les points utiles.
+4. Le batch lance la réconciliation puis `POST /api/v1/refresh:run`.
+5. Le refresh met à jour `mv_video_rollup` et les tables de séries temporelles sous verrou MariaDB.
+6. Le batch rapporte la santé des plateformes et de l’exécution.
 
-## Tenancy
+## Modèle de données
 
-UGO2 utilise actuellement une isolation simple :
+`video` est l’entité canonique. Une `video` possède zéro à plusieurs `source_video`, chacune identifiée de façon unique par `(platform, platform_video_id)`. Une source possède des `metric_snapshot` horodatés en UTC.
 
-- une base MariaDB par webTV ;
-- une configuration batch par webTV ;
-- une configuration/déploiement web par webTV.
+Les vues enrichies fournissent le dernier snapshot. `mv_video_rollup` sert la liste et ses tris ; les tables `mv_video_views_*` servent les courbes et bandes de percentiles. Les tables `platform_health`, `batch_run` et `refresh_job_state` portent l’état d’exploitation.
 
-Ce modèle évite les erreurs de filtrage entre tenants. Une base partagée avec `tenant_id` n’est utile que si l’exploitation de plusieurs instances devient trop coûteuse.
+## Frontend
 
-## Principes de données
+Angular expose quatre routes : `/`, `/v/:id`, `/duplicates` et `/health`. Le détail charge séparément les métadonnées et les séries temporelles. ECharts est empaqueté par Angular ; aucun CDN n’est utilisé.
 
-- Toutes les dates DB sont en UTC ; affichage en `Europe/Zurich`.
-- `null` = métrique inconnue ou non reçue ; `0` = mesure réelle à zéro.
-- Les vues cumulées doivent être monotones par `source_video`.
-- Les snapshots doivent rester parcimonieux : changement significatif ou garde quotidienne.
-- Les configurations réelles, tokens, clés privées et builds générés ne doivent jamais entrer dans Git ni dans une archive de revue.
+## Limites de sécurité actuelles
+
+- Les valeurs sensibles sont masquées dans les logs Java/PHP, les erreurs JSON et les états de santé.
+- Les scans Gitleaks couvrent l’historique Git et l’archive générée.
+- Le client Java sait signer les requêtes HMAC et `Auth.php` sait les vérifier.
+- Cette vérification n’est pas encore raccordée systématiquement aux contrôleurs. Toutes les mutations, y compris la résolution de doublons, sont à considérer comme internes jusqu’à sa mise en place.
+
+Les configurations réelles restent hors Git. Une base et des configurations distinctes assurent l’isolation entre instances ; il n’existe pas de `tenant_id` partagé.

@@ -1,5 +1,6 @@
 package ch.mno.ugo2.common;
 
+import ch.mno.ugo2.util.SensitiveDataRedactor;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -34,7 +35,7 @@ public class AbstractClient {
      * - si 304 Not Modified, on refait la requête SANS ETag pour récupérer le corps
      */
     protected Mono<JsonNode> getJson(URI uri, String etag) {
-        String safeUri = uri.toString().replaceAll("([?&]key=)[^&]+", "$1***");
+        String safeUri = SensitiveDataRedactor.redact(uri.toString());
         log.debug("GET {}", safeUri);
 
         return http.get().uri(uri).headers(h -> {
@@ -54,7 +55,8 @@ public class AbstractClient {
             }
 
             // autres erreurs -> message lisible
-            return resp.bodyToMono(String.class).defaultIfEmpty("").flatMap(b -> Mono.error(new RuntimeException("API error " + code + " body=" + b)));
+            return resp.bodyToMono(String.class).defaultIfEmpty("").flatMap(b -> Mono.error(new RuntimeException(
+                    "API error " + code + " body=" + SensitiveDataRedactor.redactAndTruncate(b, 1000))));
         }).timeout(Duration.ofSeconds(20));
     }
 
@@ -65,7 +67,7 @@ public class AbstractClient {
      * - si 304 Not Modified, refait la requête sans ETag pour récupérer le corps
      */
     protected <T> Mono<T> get(URI uri, String etag, Class<T> clazz) {
-        String safeUri = uri.toString().replaceAll("([?&]key=)[^&]+", "$1***");
+        String safeUri = SensitiveDataRedactor.redact(uri.toString());
         log.debug("GET {}", safeUri);
 
         return http.get()
@@ -94,7 +96,8 @@ public class AbstractClient {
                     return resp.bodyToMono(String.class)
                             .defaultIfEmpty("")
                             .flatMap(b -> Mono.error(new RuntimeException(
-                                    "API error " + code + " body=" + b)));
+                                    "API error " + code + " body="
+                                            + SensitiveDataRedactor.redactAndTruncate(b, 1000))));
                 })
                 .timeout(Duration.ofSeconds(20));
     }

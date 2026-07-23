@@ -1,6 +1,7 @@
 package ch.mno.ugo2.facebook;
 
 import ch.mno.ugo2.common.AbstractClient;
+import ch.mno.ugo2.util.SensitiveDataRedactor;
 import ch.mno.ugo2.facebook.dto.FbError;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
@@ -68,7 +69,7 @@ public class FacebookClient extends AbstractClient {
                 .build(true)
                 .toUri();
 
-        log.debug("Calling {}", uri);
+        log.debug("Calling {}", SensitiveDataRedactor.redact(uri.toString()));
         return get(uri, null, FacebookPostsResponse.class).retryWhen(retrySpec());
     }
 
@@ -77,7 +78,7 @@ public class FacebookClient extends AbstractClient {
                 .queryParam("fields", "id,title,description,permalink_url,created_time,length")
                 .queryParam("access_token", accessToken)
                 .build(true).toUri();
-        log.debug("Calling {}", uri);
+        log.debug("Calling {}", SensitiveDataRedactor.redact(uri.toString()));
         return get(uri, null, VideoResponse.class).retryWhen(retrySpec());
     }
 
@@ -111,7 +112,7 @@ public class FacebookClient extends AbstractClient {
                                     .build(true)
                                     .toUri();
 
-                            log.debug("Calling {}", uri);
+                            log.debug("Calling {}", SensitiveDataRedactor.redact(uri.toString()));
 
                             try {
                                 Map json = get(uri, null, Map.class).block();
@@ -159,7 +160,7 @@ public class FacebookClient extends AbstractClient {
         URI uri = UriComponentsBuilder.fromHttpUrl(BASE + "/" + version + "/" + videoId + "/video_insights")
                 .queryParam("access_token", accessToken)
                 .build(true).toUri();
-        log.debug("Calling {}", uri);
+        log.debug("Calling {}", SensitiveDataRedactor.redact(uri.toString()));
         return get(uri, null, InsightsResponse.class).retryWhen(retrySpec());
     }
 

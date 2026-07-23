@@ -2,16 +2,14 @@
 
 ## `GET /api/v1/health`
 
-Retourne l’état d’exploitation affiché par la page **Santé** : fraîcheur par plateforme, dernier batch, dernier refresh et alertes de token.
+Retourne l’état affiché par la page `/health` : fraîcheur par plateforme, dernier batch, dernier refresh et alertes.
 
 ```json
 {
   "ok": true,
   "service": "ugo2-api",
   "now_utc": "2026-07-13T17:30:00+00:00",
-  "alerts": [
-    "Token FACEBOOK expire le 2026-07-20 12:00:00.000."
-  ],
+  "alerts": ["Token FACEBOOK bientôt expiré."],
   "platforms": [
     {
       "platform": "FACEBOOK",
@@ -40,15 +38,15 @@ Retourne l’état d’exploitation affiché par la page **Santé** : fraîcheur
 }
 ```
 
-Les statuts de plateforme sont `OK`, `WARNING` ou `ERROR`. Le token peut être `OK`, `WARNING`, `EXPIRED`, `PROBABLY_EXPIRED`, `ERROR` ou `UNKNOWN`.
+Le statut global d’une plateforme est `OK`, `WARNING` ou `ERROR`. `token_status` utilise `OK`, `WARNING`, `EXPIRED`, `ERROR` ou `UNKNOWN`. Les messages enregistrés et renvoyés passent par le masque de données sensibles.
+
+Si le calcul de santé échoue, l’API renvoie `503` avec `{"ok":false,"service":"ugo2-api","error":"health_unavailable"}` sans détail interne.
 
 ## `POST /api/v1/health:report`
 
-Endpoint signé utilisé par le batch pour rapporter :
+Le batch envoie soit :
 
-- le succès ou l’échec de chaque plateforme ;
-- la durée et le nombre de métriques collectées ;
-- une erreur compatible avec un token expiré ;
-- le démarrage et la fin du batch.
+- un événement `type=platform` avec `platform`, `status`, dates, durée, nombre d’éléments et message facultatif ;
+- un événement `type=batch` avec `run_id`, dates, durée, statut, nombre d’éléments et erreur facultative.
 
-Il n’accepte aucun token dans le corps : seule une date d’expiration facultative peut être transmise.
+Un token ou une clé ne doit jamais être placé dans le corps. Une date `token_expires_at` peut être transmise. L’authentification HMAC n’étant pas encore imposée par le contrôleur actuel, cette route doit rester interne.
