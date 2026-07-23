@@ -30,6 +30,7 @@ replay_pid*
 /web/*.properties
 /web/src/back/config/config.php
 /web/src/back/config/config.php.*
+/web/src/front/
 /web/up-*.sh
 /batch/src/main/resources/application.properties
 /.ugo2

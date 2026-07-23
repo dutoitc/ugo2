@@ -1,0 +1,19 @@
+# Cible SSH
+HOST=votre-serveur.exemple.org
+PORT=22
+USER=deploy
+
+# Dossier distant qui recevra le contenu de web/
+REMOTE_DIR=/sites/video-stats.example.org
+
+# Variante locale copiée en src/back/config/config.php avant le transfert
+CONFIG_VARIANT=config.php.site1
+
+# Facultatif : clé privée SSH, jamais la clé publique
+SSH_IDENTITY=~/.ssh/id_ed25519
+
+# 1 = simulation rsync
+DRY_RUN=0
+
+# 1 = supprime du serveur les fichiers qui n'existent plus localement
+DELETE_REMOTE=0

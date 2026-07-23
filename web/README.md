@@ -1,14 +1,14 @@
 # UGO2 Web
 
-Le dossier `web/` contient l’API PHP, le build Angular servi statiquement et les scripts SQL.
+Le dossier `web/` contient l’API PHP, les sources Angular, le build servi statiquement et les scripts SQL.
 
 ## Arborescence
 
 | Chemin | Contenu |
 |---|---|
-| `index.php` | Point d’entrée de l’API et fallback de la SPA. |
+| `.htaccess` | Route l’API vers PHP et les autres URL vers la SPA. |
 | `src/back/` | PHP 8, contrôleurs, services et accès PDO. |
-| `src/front/` | Build Angular généré. |
+| `src/front/` | Build Angular généré localement et ignoré par Git. |
 | `ihm/` | Sources Angular. |
 | `sql/` | Bootstrap SQL historique. |
 | `doc/` | Contrats API et modèle DB. |
@@ -23,6 +23,14 @@ cp src/back/config/config.php.tmpl src/back/config/config.php
 
 Renseigner la connexion MariaDB et les clés HMAC uniquement dans `config.php`, qui n’est pas versionné. Le modèle conserve exclusivement des exemples neutres.
 
+Pour utiliser une autre API avec le serveur Angular local :
+
+```bash
+cp ihm/src/proxy.conf.json ihm/src/proxy.conf.local.json
+```
+
+Modifier uniquement `proxy.conf.local.json`, ignoré par Git, puis lancer `ihm/myserve.sh`.
+
 ## Build frontend
 
 ```bash
@@ -32,7 +40,18 @@ npm audit --omit=dev --audit-level=moderate
 npm run build
 ```
 
-Le résultat remplace les fichiers générés de `src/front/`.
+Le résultat remplace les fichiers générés de `src/front/`. Ces fichiers ne doivent pas être commités.
+
+## Déploiement
+
+Créer une configuration locale à partir du modèle :
+
+```bash
+cp site.properties.tmpl site.properties
+./up.sh site.properties
+```
+
+`up.sh` reconstruit Angular, prépare la configuration PHP choisie et transfère le site par SSH/rsync. La suppression des anciens fichiers distants est désactivée par défaut ; l’activer explicitement avec `DELETE_REMOTE=1` dans la configuration locale.
 
 ## Base de données
 
@@ -48,4 +67,4 @@ Après avoir démarré une instance locale ou de test :
 ./testui.sh http://localhost:8080
 ```
 
-Le script ne fait que trois lectures : la SPA, `/api/v1/health` et `/api/v1/videos`. Aucun déploiement distant n’est automatisé par ce dépôt.
+Le script ne fait que trois lectures : la SPA, `/api/v1/health` et `/api/v1/videos`.

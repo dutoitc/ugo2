@@ -43,7 +43,7 @@ npm audit --omit=dev --audit-level=moderate
 npm run build
 ```
 
-Le build Angular est écrit dans `web/src/front/`. Le workflow GitHub `frontend.yml` exécute l’audit des dépendances de production et le build. `secret-scan.yml` analyse l’historique Git ainsi qu’une archive de revue.
+Le build Angular est écrit dans `web/src/front/`, qui est ignoré par Git : le dépôt ne contient que les sources de `web/ihm/`. Le workflow GitHub `frontend.yml` exécute l’audit des dépendances de production et le build. `secret-scan.yml` analyse l’historique Git ainsi qu’une archive de revue.
 
 ## Base de données
 
