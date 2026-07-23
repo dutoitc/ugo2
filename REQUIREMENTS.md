@@ -31,7 +31,7 @@ Centraliser les statistiques vidéo de deux webTV indépendantes, rapprocher une
 - Une base MariaDB, une configuration batch et un déploiement web par webTV.
 - Le batch Java appelle l’API PHP ; il ne se connecte pas directement à la DB.
 - Le front Angular consomme uniquement l’API PHP.
-- Les configurations réelles restent hors Git. Le build Angular de déploiement est actuellement versionné dans `web/src/front/`.
+- Les configurations réelles et le build Angular de déploiement restent hors Git. Le build est produit dans `web/src/front/` avant le transfert.
 
 ## Sécurité cible
 

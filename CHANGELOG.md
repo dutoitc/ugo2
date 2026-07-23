@@ -16,11 +16,13 @@ Les changements notables du projet sont consignés ici selon [Keep a Changelog](
 - Mise à niveau vers Angular 20.3 et ECharts 6.1 ; suppression de `ngx-echarts` inutilisé et du chargement ECharts par CDN.
 - Ajout d’une CI frontend avec audit des dépendances de production et build Angular.
 - Alignement du README, de l’architecture, de l’API, du modèle DB et de la spécification IHM sur le code présent.
+- Conservation du déploiement SSH/rsync avec build Angular préalable et suppression distante explicitement optionnelle.
 
 ### Supprimé
 
 - Routes d’agrégats non implémentées qui répondaient `501`.
-- Anciennes mutations `GET` de refresh et scripts de déploiement `rsync --delete` propres à un hébergement.
+- Anciennes mutations `GET` de refresh et point de diagnostic public `phpinfo()`.
+- Build Angular versionné dans `web/src/front/` ; il est désormais produit localement.
 
 ### Corrigé
 
